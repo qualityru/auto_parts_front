@@ -8,8 +8,8 @@ function EmptyState({ onExampleSearch }) {
         <button className="example-btn" onClick={() => onExampleSearch('OC90')}>
           OC90
         </button>
-        <button className="example-btn" onClick={() => onExampleSearch('FILTER')}>
-          FILTER
+        <button className="example-btn" onClick={() => onExampleSearch('MOX100')}>
+          MOX100
         </button>
         <button className="example-btn" onClick={() => onExampleSearch('01218N3')}>
           01218N3

@@ -14,8 +14,8 @@ function SearchBar({ searchQuery, setSearchQuery, onSearch }) {
         className="search-input"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        onKeyPress={handleKeyPress}
-        placeholder="Введите артикул запчасти (например: 01218N3, OC90, FILTER)"
+        onKeyUp={handleKeyPress}
+        placeholder="Введите артикул запчасти (например: 01218N3, OC90, MOX100)"
         autoComplete="off"
         autoFocus
       />

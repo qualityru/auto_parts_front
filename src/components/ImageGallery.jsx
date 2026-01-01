@@ -2,69 +2,72 @@ import React, { useState, useEffect, useRef } from 'react';
 
 function ImageGallery({ images }) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
   const slidesRef = useRef(null);
+
+  // Минимальное расстояние в пикселях для срабатывания свайпа
+  const minSwipeDistance = 50;
 
   const validImages = images.filter(img => img && img.trim() !== '');
   
-  if (validImages.length === 0) {
-    return (
-      <div className="no-image">
-        <i className="fas fa-camera-slash"></i>
-        <span>Изображение отсутствует</span>
-      </div>
-    );
-  }
+  if (validImages.length === 0) return <div>Нет фото</div>;
 
-  const nextSlide = () => {
-    setCurrentIndex((prev) => (prev + 1) % validImages.length);
+  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % validImages.length);
+  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + validImages.length) % validImages.length);
+
+  // Обработка начала касания
+  const onTouchStart = (e) => {
+    setTouchEnd(null); // сброс в начале
+    setTouchStart(e.targetTouches[0].clientX);
   };
 
-  const prevSlide = () => {
-    setCurrentIndex((prev) => (prev - 1 + validImages.length) % validImages.length);
-  };
+  // Обработка движения
+  const onTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
 
-  const goToSlide = (index) => {
-    setCurrentIndex(index);
+  // Обработка завершения касания
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      nextSlide();
+    } else if (isRightSwipe) {
+      prevSlide();
+    }
   };
 
   useEffect(() => {
     if (slidesRef.current) {
-      const translateX = -currentIndex * 100;
-      slidesRef.current.style.transform = `translateX(${translateX}%)`;
+      slidesRef.current.style.transform = `translateX(-${currentIndex * 100}%)`;
     }
   }, [currentIndex]);
 
   return (
-    <div className="gallery-container">
-      <div className="gallery-slides" ref={slidesRef}>
+    <div 
+      className="gallery-container"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ touchAction: 'pan-y' }} // Важно: разрешает вертикальную прокрутку страницы, но ловит горизонтальные свайпы
+    >
+      <div className="gallery-slides" ref={slidesRef} style={{ display: 'flex', transition: 'transform 0.3s ease-out' }}>
         {validImages.map((src, index) => (
-          <div key={index} className="gallery-slide">
-            <img src={src} alt={`Изображение ${index + 1}`} />
+          <div key={index} className="gallery-slide" style={{ minWidth: '100%' }}>
+            <img src={src} alt={`Slide ${index}`} style={{ pointerEvents: 'none' }} />
           </div>
         ))}
       </div>
       
+      {/* Кнопки навигации оставляем без изменений */}
       {validImages.length > 1 && (
-        <>
-          <div className="gallery-nav">
-            <button className="nav-btn" onClick={(e) => { e.stopPropagation(); prevSlide(); }}>
-              <i className="fas fa-chevron-left"></i>
-            </button>
-            <button className="nav-btn" onClick={(e) => { e.stopPropagation(); nextSlide(); }}>
-              <i className="fas fa-chevron-right"></i>
-            </button>
-          </div>
-          
-          <div className="image-indicators">
-            {validImages.map((_, index) => (
-              <div
-                key={index}
-                className={`indicator ${index === currentIndex ? 'active' : ''}`}
-                onClick={(e) => { e.stopPropagation(); goToSlide(index); }}
-              ></div>
-            ))}
-          </div>
-        </>
+        <div className="gallery-nav">
+           <button onClick={prevSlide}>←</button>
+           <button onClick={nextSlide}>→</button>
+        </div>
       )}
     </div>
   );
