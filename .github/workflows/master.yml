@@ -8,24 +8,24 @@ on:
       - 'public/**'
       - 'package.json'
       - 'package-lock.json'
-      - 'yarn.lock'
       - 'Dockerfile'
       - 'nginx.front.conf'
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js (use Node 20 to satisfy engines)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies (try `npm ci`, fallback to `npm install`)
-        run: npm ci || npm install --no-audit --prefer-offline
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build app
         run: npm run build
