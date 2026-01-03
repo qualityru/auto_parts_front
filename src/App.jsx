@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import './styles/App.css'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
