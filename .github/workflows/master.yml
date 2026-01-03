@@ -8,13 +8,13 @@ on:
       - 'public/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'yarn.lock'
       - 'Dockerfile'
       - 'nginx.front.conf'
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
