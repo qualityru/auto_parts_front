@@ -7,15 +7,17 @@ function ProductCard({
   onOpenImageModal, 
   isItemInCart 
 }) {
-  // Исправлено: удалили setCurrentImageIndex, так как переключение фото пока не реализовано
   const [currentImageIndex] = useState(0)
   const [showAllWarehouses, setShowAllWarehouses] = useState(false)
 
-  // Исправлено: используем данные напрямую из пропса, чтобы избежать предупреждений о зависимостях
-  const warehouses = product.warehouses || []
-  const images = product.images || []
+  // Инициализируем через useMemo, чтобы ссылка была стабильной между рендерами
+  const warehouses = useMemo(() => product.warehouses || [], [product.warehouses])
+  const images = useMemo(() => product.images || [], [product.images])
+  
   const isCross = product.is_cross || false
   
+  // Теперь зависимость [warehouses] будет меняться только тогда, 
+  // когда реально изменится массив в пропсах
   const minPrice = useMemo(() => {
     if (warehouses.length === 0) return 0
     return Math.min(...warehouses.map(w => w.price))
@@ -112,7 +114,10 @@ function ProductCard({
                       <span className="wh-price">{formatPrice(warehouse.price)}</span>
                       <button
                         className={`small-cart-btn ${inCart ? 'added' : ''}`}
-                        onClick={() => onAddToCart(product, warehouse)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddToCart(product, warehouse);
+                        }}
                         disabled={inCart}
                       >
                         <i className={inCart ? 'fas fa-check' : 'fas fa-cart-plus'}></i>
