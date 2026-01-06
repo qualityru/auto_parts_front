@@ -1,147 +1,118 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 
-function ProductCard({ 
-  product, 
-  index, 
-  onAddToCart, 
-  onOpenImageModal, 
-  isItemInCart 
+function ProductCard({
+  product,
+  index,
+  onAddToCart,
+  isItemInCart,
+  onOpenImageModal,
 }) {
-  const [currentImageIndex] = useState(0)
-  const [showAllWarehouses, setShowAllWarehouses] = useState(false)
+  const [showAll, setShowAll] = useState(false)
 
-  // Инициализируем через useMemo, чтобы ссылка была стабильной между рендерами
-  const warehouses = useMemo(() => product.warehouses || [], [product.warehouses])
-  const images = useMemo(() => product.images || [], [product.images])
-  
-  const isCross = product.is_cross || false
-  
-  // Теперь зависимость [warehouses] будет меняться только тогда, 
-  // когда реально изменится массив в пропсах
-  const minPrice = useMemo(() => {
-    if (warehouses.length === 0) return 0
-    return Math.min(...warehouses.map(w => w.price))
-  }, [warehouses])
+  const warehouses = showAll
+    ? product.warehouses
+    : product.warehouses.slice(0, 3)
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      minimumFractionDigits: 0
-    }).format(price)
-  }
-
-  const validImages = images.filter(img => img && img.trim() !== '')
-  const visibleWarehouses = showAllWarehouses ? warehouses : warehouses.slice(0, 3)
-
-  const handleImageError = (e) => {
-    e.target.onerror = null
-    e.target.src = 'https://via.placeholder.com/300x200?text=Нет+фото'
-  }
+  const minPrice = Math.min(...product.warehouses.map(w => w.price))
 
   return (
-    <div className="product-card" style={{ animationDelay: `${index * 0.05}s` }}>
-      <div className="image-gallery" onClick={() => validImages.length > 0 && onOpenImageModal()}>
-        {validImages.length > 0 ? (
-          <div className="gallery-container">
-            <img 
-              src={validImages[currentImageIndex]} 
-              alt={product.name}
-              onError={handleImageError}
-              loading="lazy"
-            />
-            {validImages.length > 1 && (
-              <div className="image-count">
-                <i className="fas fa-images"></i> {validImages.length}
-              </div>
-            )}
-          </div>
+    <div className="product-card" style={{ animationDelay: `${index * 0.1}s` }}>
+      {/* Images */}
+      <div className="image-gallery" onClick={onOpenImageModal}>
+        {product.images?.length ? (
+          <img src={product.images[0]} alt={product.name} />
         ) : (
           <div className="no-image">
-            <i className="fas fa-camera-slash"></i>
-            <span>Нет фото</span>
+            <i className="fas fa-image" />
+            Нет фото
           </div>
         )}
       </div>
-      
+
       <div className="product-content">
-        <div className="product-header">
-          <div className="product-brand">{product.brand}</div>
-          <h3 className="product-title">{product.name}</h3>
-          <div className="product-article">
-            <span>Артикул: <strong>{product.article}</strong></span>
-            {isCross && <span className="cross-badge">Аналог</span>}
-          </div>
+        <span className="product-brand">{product.brand}</span>
+
+        <h3 className="product-title">{product.name || 'Без названия'}</h3>
+
+        <div className="product-article">
+          <span className="article-badge">{product.article}</span>
+          {product.is_cross && <span className="cross-badge">АНАЛОГ</span>}
         </div>
-        
+
         <div className="price-actions">
           <div className="price-info">
-            <span className="price-label">Лучшая цена:</span>
-            <span className="min-price-value">{formatPrice(minPrice)}</span>
+            <div className="best-price-container">
+              <span className="min-price">{minPrice.toFixed(2)}</span>
+              <span className="currency">RUB</span>
+            </div>
+            <span className="price-label">лучшая цена</span>
           </div>
         </div>
-        
-        {warehouses.length > 0 && (
-          <div className="warehouses-section">
-            <div className="warehouses-title">
-              <i className="fas fa-warehouse"></i>
-              <span>Предложения ({warehouses.length})</span>
-            </div>
-            <div className="warehouses-list">
-              {visibleWarehouses.map((warehouse, idx) => {
-                const whId = warehouse.id || `${warehouse.supplier}-${warehouse.name}-${warehouse.price}`
-                const inCart = isItemInCart(product.internalId, whId)
-                
-                return (
-                  <div key={idx} className="warehouse-card">
-                    <div className="warehouse-info">
-                      <div className="wh-main-line">
-                        <span className="wh-name">{warehouse.name || 'Склад'}</span>
-                        <span className="wh-supplier-tag">{warehouse.supplier}</span>
-                      </div>
-                      <div className="warehouse-details">
-                        <span className={`detail-item ${warehouse.quantity > 5 ? 'in-stock' : 'low-stock'}`}>
-                          <i className="fas fa-box"></i> {warehouse.quantity} шт.
-                        </span>
-                        {warehouse.delivery_days !== undefined && (
-                          <span className="detail-item">
-                            <i className="fas fa-clock"></i> {warehouse.delivery_days} дн.
-                          </span>
+
+        <div className="warehouses-section">
+          <div className="warehouses-title">
+            <i className="fas fa-warehouse" />
+            Склады
+          </div>
+
+          <div className="warehouses-list">
+            {warehouses.map(w => {
+              const inCart = isItemInCart(product.internalId, w.id)
+
+              return (
+                <div key={w.id} className="warehouse-card">
+                  <div className="warehouse-info">
+                    <h4>
+                      {w.name}
+                      <span className="wh-supplier-tag">{w.supplier}</span>
+                    </h4>
+
+                    <div className="warehouse-details">
+                      <div className="detail-item">
+                        <i className="fas fa-boxes" />
+                        {w.quantity > 0 ? (
+                          <span className="in-stock">В наличии: {w.quantity}</span>
+                        ) : (
+                          <span className="low-stock">Нет в наличии</span>
                         )}
                       </div>
-                    </div>
-                    <div className="warehouse-price-block">
-                      <span className="wh-price">{formatPrice(warehouse.price)}</span>
-                      <button
-                        className={`small-cart-btn ${inCart ? 'added' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddToCart(product, warehouse);
-                        }}
-                        disabled={inCart}
-                      >
-                        <i className={inCart ? 'fas fa-check' : 'fas fa-cart-plus'}></i>
-                      </button>
+
+                      {w.delivery_days && (
+                        <div className="detail-item">
+                          <i className="fas fa-truck" />
+                          {w.delivery_days} дн.
+                        </div>
+                      )}
                     </div>
                   </div>
-                )
-              })}
-              
-              {warehouses.length > 3 && (
-                <button 
-                  className="more-btn" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowAllWarehouses(!showAllWarehouses);
-                  }}
-                >
-                  <i className={`fas fa-chevron-${showAllWarehouses ? 'up' : 'down'}`}></i>
-                  {showAllWarehouses ? 'Скрыть' : `Показать еще ${warehouses.length - 3}`}
-                </button>
-              )}
-            </div>
+
+                  <div className="warehouse-price">
+                    <div className="warehouse-price-row">
+                      <span className="price">{w.price.toFixed(2)}</span>
+                      <span className="currency">{w.currency}</span>
+                    </div>
+
+                    <button
+                      className={`small-cart-btn ${inCart ? 'added' : ''}`}
+                      disabled={!w.is_available}
+                      onClick={() => onAddToCart(product, w)}
+                    >
+                      <i className="fas fa-cart-plus" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        )}
+
+          {product.warehouses.length > 3 && (
+            <div className="more-warehouses-btn">
+              <button className="more-btn" onClick={() => setShowAll(v => !v)}>
+                {showAll ? 'Скрыть' : 'Показать все'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
