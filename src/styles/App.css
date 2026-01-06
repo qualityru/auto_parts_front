@@ -1767,3 +1767,154 @@
 
 .low-stock { color: #f39c12; }
 .in-stock { color: #27ae60; }
+
+/* ================= ULTRA COMPACT CARD ================= */
+
+.product-card.ultra-compact {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.image-gallery.ultra-compact {
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+}
+
+.image-gallery.ultra-compact img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.product-content.ultra-compact {
+  padding: 10px 12px;
+}
+
+.product-topline {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.7rem;
+  margin-bottom: 4px;
+}
+
+.meta {
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.meta.supplier { background: #e5e7eb; }
+.meta.article { background: #dbeafe; color: #1d4ed8; }
+.meta.cross { background: #fde68a; }
+.meta.orig { background: #bbf7d0; }
+
+.product-brand-line {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.product-title.ultra-compact {
+  font-size: 0.9rem;
+  line-height: 1.25;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.price-row.ultra-compact {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.price-row .price {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+.warehouses.ultra-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.warehouse-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 4px;
+}
+
+.warehouse-left {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ok { color: #16a34a; }
+.warn { color: #d97706; }
+.return { color: #2563eb; }
+
+.warehouse-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wh-price {
+  font-weight: 700;
+  color: #16a34a;
+}
+
+.cart-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.cart-btn.added {
+  background: #16a34a;
+}
+
+.more-compact {
+  align-self: center;
+  background: transparent;
+  border: none;
+  font-size: 0.7rem;
+  color: #2563eb;
+  cursor: pointer;
+}
+.brand-badge {
+  display: inline-block;
+  margin-bottom: 4px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  width: fit-content;
+}
+
+/* ===== WAREHOUSE LINE ===== */
+.no-return {
+  color: #9ca3af;
+  font-size: 0.7rem;
+}

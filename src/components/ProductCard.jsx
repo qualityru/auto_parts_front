@@ -13,104 +13,119 @@ function ProductCard({
     ? product.warehouses
     : product.warehouses.slice(0, 3)
 
-  const minPrice = Math.min(...product.warehouses.map(w => w.price))
+  const minPrice =
+    product.metadata?.min_price ??
+    (product.warehouses?.length
+      ? Math.min(...product.warehouses.map(w => w.price))
+      : 0)
+
+  const isCross = product.metadata?.is_cross === true
+
+  const formatPrice = (price) =>
+    new Intl.NumberFormat('ru-RU', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(price)
 
   return (
-    <div className="product-card" style={{ animationDelay: `${index * 0.1}s` }}>
-      {/* Images */}
-      <div className="image-gallery" onClick={onOpenImageModal}>
+    <div
+      className="product-card ultra-compact"
+      style={{ animationDelay: `${index * 0.05}s` }}
+    >
+      {/* IMAGE */}
+      <div
+        className="image-gallery ultra-compact"
+        onClick={onOpenImageModal}
+      >
         {product.images?.length ? (
           <img src={product.images[0]} alt={product.name} />
         ) : (
-          <div className="no-image">
-            <i className="fas fa-image" />
-            Нет фото
-          </div>
+          <div className="no-image">Нет фото</div>
         )}
       </div>
 
-      <div className="product-content">
-        <span className="product-brand">{product.brand}</span>
+      <div className="product-content ultra-compact">
+        {/* TOP LINE */}
+        <div className="product-topline">
+          {product.supplier && (
+            <span className="meta supplier">{product.supplier}</span>
+          )}
 
-        <h3 className="product-title">{product.name || 'Без названия'}</h3>
+          <span className={`meta ${isCross ? 'cross' : 'orig'}`}>
+            {isCross ? 'АНАЛОГ' : 'ОРИГИНАЛ'}
+          </span>
 
-        <div className="product-article">
-          <span className="article-badge">{product.article}</span>
-          {product.is_cross && <span className="cross-badge">АНАЛОГ</span>}
+          <span className="meta article">{product.article}</span>
         </div>
 
-        <div className="price-actions">
-          <div className="price-info">
-            <div className="best-price-container">
-              <span className="min-price">{minPrice.toFixed(2)}</span>
-              <span className="currency">RUB</span>
-            </div>
-            <span className="price-label">лучшая цена</span>
+        {/* BRAND */}
+        {product.brand && (
+          <div className="brand-badge">
+            {product.brand}
           </div>
+        )}
+
+        {/* TITLE */}
+        <h3 className="product-title ultra-compact">
+          {product.name || 'Без названия'}
+        </h3>
+
+        {/* PRICE */}
+        <div className="price-row ultra-compact">
+          <span className="price">{formatPrice(minPrice)}</span>
+          <span className="currency">₽</span>
         </div>
 
-        <div className="warehouses-section">
-          <div className="warehouses-title">
-            <i className="fas fa-warehouse" />
-            Склады
-          </div>
+        {/* WAREHOUSES */}
+        <div className="warehouses ultra-compact">
+          {warehouses.map(w => {
+            const inCart = isItemInCart(product.internalId, w.id)
+            const info = w.supplier_info || {}
 
-          <div className="warehouses-list">
-            {warehouses.map(w => {
-              const inCart = isItemInCart(product.internalId, w.id)
+            return (
+              <div key={w.id} className="warehouse-row">
+                <div className="warehouse-left">
+                  <span className={w.quantity > 0 ? 'ok' : 'warn'}>
+                    {w.quantity > 0 ? `В наличии: ${w.quantity}` : 'Нет'}
+                  </span>
 
-              return (
-                <div key={w.id} className="warehouse-card">
-                  <div className="warehouse-info">
-                    <h4>
-                      {w.name}
-                      <span className="wh-supplier-tag">{w.supplier}</span>
-                    </h4>
+                  {w.delivery_days && (
+                    <span>{w.delivery_days} дн</span>
+                  )}
 
-                    <div className="warehouse-details">
-                      <div className="detail-item">
-                        <i className="fas fa-boxes" />
-                        {w.quantity > 0 ? (
-                          <span className="in-stock">В наличии: {w.quantity}</span>
-                        ) : (
-                          <span className="low-stock">Нет в наличии</span>
-                        )}
-                      </div>
-
-                      {w.delivery_days && (
-                        <div className="detail-item">
-                          <i className="fas fa-truck" />
-                          {w.delivery_days} дн.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="warehouse-price">
-                    <div className="warehouse-price-row">
-                      <span className="price">{w.price.toFixed(2)}</span>
-                      <span className="currency">{w.currency}</span>
-                    </div>
-
-                    <button
-                      className={`small-cart-btn ${inCart ? 'added' : ''}`}
-                      disabled={!w.is_available}
-                      onClick={() => onAddToCart(product, w)}
-                    >
-                      <i className="fas fa-cart-plus" />
-                    </button>
-                  </div>
+                  {typeof info.back_days === 'number' ? (
+                    <span className="return">
+                      возврат {info.back_days} дн
+                    </span>
+                  ) : (
+                    <span className="no-return">без возврата</span>
+                  )}
                 </div>
-              )
-            })}
-          </div>
+
+                <div className="warehouse-right">
+                  <span className="wh-price">
+                    {formatPrice(w.price)}
+                  </span>
+
+                  <button
+                    className={`cart-btn ${inCart ? 'added' : ''}`}
+                    disabled={!w.is_available}
+                    onClick={() => onAddToCart(product, w)}
+                  >
+                    <i className={inCart ? 'fas fa-check' : 'fas fa-cart-plus'} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
 
           {product.warehouses.length > 3 && (
-            <div className="more-warehouses-btn">
-              <button className="more-btn" onClick={() => setShowAll(v => !v)}>
-                {showAll ? 'Скрыть' : 'Показать все'}
-              </button>
-            </div>
+            <button
+              className="more-compact"
+              onClick={() => setShowAll(v => !v)}
+            >
+              {showAll ? 'Скрыть' : 'Ещё'}
+            </button>
           )}
         </div>
       </div>
