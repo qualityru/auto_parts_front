@@ -14,30 +14,31 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+          cache: 'npm' # Автоматическое кэширование зависимостей npm
 
-      - name: Install dependencies (try npm ci, fallback to npm install)
-        run: npm ci || npm install --no-audit --prefer-offline
-
-      - name: Build app
-        run: npm run build
+      - name: Install dependencies
+        # Используем кэш, чтобы не качать всё заново
+        run: npm ci --prefer-offline --no-audit
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/auto_parts_front:latest
+          # Магия ускорения: кэширование слоев Docker внутри GitHub Actions
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
