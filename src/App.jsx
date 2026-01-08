@@ -1,21 +1,14 @@
 import { useState, useRef, useCallback } from 'react'
-
 import {
   Box,
   Container,
   Typography,
-  IconButton,
-  Badge,
   Stack,
   Grid,
   Chip,
 } from '@mui/material'
 
-import AccountCircleIcon from '@mui/icons-material/AccountCircle'
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
-
 import Header from './components/Header'
-import SearchBar from './components/SearchBar'
 import ProductCard from './components/ProductCard'
 import LoadingSpinner from './components/LoadingSpinner'
 import ErrorMessage from './components/ErrorMessage'
@@ -187,30 +180,25 @@ function App() {
 
   return (
     <Box minHeight="100vh" bgcolor="#f7f7f7">
-      {/* Верхние кнопки */}
-      <Box position="fixed" top={16} right={16} zIndex={1000}>
-        <Stack direction="row" spacing={1}>
-          <IconButton color="primary" onClick={() => setShowAccountModal(true)}>
-            <AccountCircleIcon />
-          </IconButton>
+      <Header 
+        onAccountClick={() => setShowAccountModal(true)}
+        onExampleSearch={(q) => {
+          if (q === '') {
+            setSearchQuery('')
+            setProducts([])
+            setError(null)
+          } else {
+            setSearchQuery(q)
+            handleSearch(q)
+          }
+        }}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        onSearch={() => handleSearch()}
+        cartItems={cartItems}
+      />
 
-          <IconButton color="primary" onClick={() => setShowCartModal(true)}>
-            <Badge badgeContent={cartItems.length} color="error">
-              <ShoppingCartIcon />
-            </Badge>
-          </IconButton>
-        </Stack>
-      </Box>
-
-      <Header onExampleSearch={(q) => { setSearchQuery(q); handleSearch(q) }} />
-
-      <Container maxWidth="xl" sx={{ mt: 4 }}>
-        <SearchBar
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          onSearch={handleSearch}
-        />
-
+      <Container maxWidth="xl" sx={{ mt: 4, pb: 4 }}>
         <Box mt={4}>
           {isLoading && products.length === 0 && <LoadingSpinner />}
           {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
@@ -252,8 +240,11 @@ function App() {
             </>
           )}
 
-          {!isLoading && products.length === 0 && !error && (
-            <EmptyState onExampleSearch={(q) => { setSearchQuery(q); handleSearch(q) }} />
+          {!isLoading && products.length === 0 && !error && searchQuery === '' && (
+            <EmptyState onExampleSearch={(q) => {
+              setSearchQuery(q)
+              handleSearch(q)
+            }} />
           )}
         </Box>
       </Container>

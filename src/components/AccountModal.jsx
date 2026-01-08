@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom' // 1. Импортируем хук навигации
 import {
   Dialog,
   DialogTitle,
@@ -16,59 +17,72 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import { authorize, confirmEmail, createUser } from '../utils/api'
 
 function AccountModal({ onClose }) {
+  const navigate = useNavigate() // 2. Инициализируем навигацию
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
-  const [message, setMessage] = useState(null)
+  const [message, setMessage] = useState({ text: '', color: 'primary' })
   const [loading, setLoading] = useState(false)
+  const [step, setStep] = useState('login')
+
+  const showMsg = (text, color = 'primary') => setMessage({ text, color })
+
+  // Функция для успешного завершения (сохранение токена и редирект)
+  const handleSuccessAuth = (token) => {
+    localStorage.setItem('authToken', token)
+    onClose?.() // Закрываем модалку
+    navigate('/profile') // 3. Перенаправляем на страницу профиля
+  }
 
   async function handleSendCode() {
+    if (!email) return showMsg('Введите email', 'error')
     setLoading(true)
-    setMessage(null)
     try {
-      await confirmEmail({ login: email }, undefined, false)
-      setMessage('Код отправлен на почту')
+      await confirmEmail({ email }, undefined, false)
+      setStep('confirm')
+      showMsg('Код отправлен на почту.')
     } catch (e) {
-      setMessage(e.message)
+      showMsg(e.message, 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleConfirmCodeAndCreate() {
+  async function handleConfirmAndRegister() {
+    if (!code) return showMsg('Введите код', 'error')
     setLoading(true)
-    setMessage(null)
     try {
-      await confirmEmail({ login: email }, code, false)
-      const { token } = await createUser(undefined, { login: email, password })
-      if (token) {
-        localStorage.setItem('authToken', token)
-        setMessage('Регистрация успешна')
-        onClose?.()
+      const confirmRes = await confirmEmail({ email }, code, false)
+      const hash = confirmRes?.data?.hash
+
+      if (hash) {
+        // Передаем только login и password, как того требует ваш API
+        const { token } = await createUser(hash, { login: email, password })
+        if (token) {
+          handleSuccessAuth(token)
+        }
       } else {
-        setMessage('Регистрация: не получен токен')
+        showMsg('Ошибка: хэш подтверждения не получен', 'error')
       }
     } catch (e) {
-      setMessage(e.message)
+      showMsg(e.message, 'error')
     } finally {
       setLoading(false)
     }
   }
 
   async function handleLogin() {
+    if (!email || !password) return showMsg('Заполните все поля', 'error')
     setLoading(true)
-    setMessage(null)
     try {
       const { token } = await authorize({ login: email, password })
       if (token) {
-        localStorage.setItem('authToken', token)
-        setMessage('Вход успешен')
-        onClose?.()
+        handleSuccessAuth(token)
       } else {
-        setMessage('Вход: не получен токен')
+        showMsg('Ошибка: токен не получен', 'error')
       }
     } catch (e) {
-      setMessage(e.message)
+      showMsg(e.message, 'error')
     } finally {
       setLoading(false)
     }
@@ -76,29 +90,22 @@ function AccountModal({ onClose }) {
 
   return (
     <Dialog open={true} onClose={onClose} maxWidth="xs" fullWidth>
-      {/* HEADER */}
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Stack direction="row" spacing={1} alignItems="center">
-          <AccountCircleIcon fontSize="large" />
-          <Stack spacing={0}>
-            <Typography variant="h6">Личный кабинет</Typography>
-            <Typography variant="body2" color="text.secondary">Вход / регистрация</Typography>
-          </Stack>
+          <AccountCircleIcon fontSize="large" color="primary" />
+          <Typography variant="h6">Аккаунт</Typography>
         </Stack>
-        <IconButton onClick={onClose}>
-          <CloseIcon />
-        </IconButton>
+        <IconButton onClick={onClose}><CloseIcon /></IconButton>
       </DialogTitle>
 
-      {/* BODY */}
       <DialogContent dividers>
-        <Stack spacing={2}>
+        <Stack spacing={2.5} sx={{ mt: 1 }}>
           <TextField
-            label="Почта"
-            type="email"
+            label="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             fullWidth
+            size="small"
           />
           <TextField
             label="Пароль"
@@ -106,46 +113,43 @@ function AccountModal({ onClose }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             fullWidth
+            size="small"
           />
 
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" onClick={handleLogin} disabled={loading} fullWidth>
-              {loading ? <CircularProgress size={20} /> : 'Войти'}
-            </Button>
-            <Button variant="outlined" onClick={handleSendCode} disabled={loading} fullWidth>
-              Отправить код
-            </Button>
-          </Stack>
+          {step === 'login' ? (
+            <Stack spacing={1}>
+              <Button variant="contained" onClick={handleLogin} disabled={loading} fullWidth>
+                {loading ? <CircularProgress size={24} /> : 'Войти'}
+              </Button>
+              <Button variant="outlined" onClick={handleSendCode} disabled={loading} fullWidth>
+                Зарегистрироваться
+              </Button>
+            </Stack>
+          ) : (
+            <Stack spacing={2} sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+              <TextField
+                label="Код из письма"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                fullWidth
+                size="small"
+              />
+              <Button variant="contained" color="success" onClick={handleConfirmAndRegister} disabled={loading}>
+                Подтвердить регистрацию
+              </Button>
+              <Button size="small" onClick={() => setStep('login')}>Назад</Button>
+            </Stack>
+          )}
 
-          <TextField
-            label="Код из письма"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            fullWidth
-          />
-
-          <Button
-            variant="contained"
-            onClick={handleConfirmCodeAndCreate}
-            disabled={loading}
-            fullWidth
-          >
-            {loading ? <CircularProgress size={20} /> : 'Подтвердить и зарегистрировать'}
-          </Button>
-
-          {message && (
-            <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
-              {message}
+          {message.text && (
+            <Typography variant="body2" color={message.color === 'error' ? 'error.main' : 'primary.main'} textAlign="center">
+              {message.text}
             </Typography>
           )}
         </Stack>
       </DialogContent>
-
-      {/* FOOTER */}
       <DialogActions>
-        <Button onClick={onClose} color="secondary">
-          Закрыть
-        </Button>
+        <Button onClick={onClose} color="inherit">Закрыть</Button>
       </DialogActions>
     </Dialog>
   )

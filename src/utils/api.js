@@ -146,6 +146,11 @@ export async function testSearchStream(article) {
   return events
 }
 
+export async function getProfile() {
+  // Наша функция request сама подставит токен из localStorage, если он там есть
+  const res = await request('/auth/me'); 
+  return await res.json();
+}
 export async function authorize(payload) {
   const body = normalizeLoginPayload(payload)
   const res = await request('/auth', {
@@ -205,19 +210,23 @@ export async function passwordRecovery(requestBody, guard_hash = undefined) {
 }
 
 function normalizeLoginPayload(payload) {
-  if (!payload) return {}
+  if (!payload) return {};
 
+  // Если пришла строка, делаем из неё объект с логином
   if (typeof payload === 'string') {
-    return { login: payload }
+    return { login: payload };
   }
 
-  if (payload.login) {
-    return payload
+  // Создаем копию данных
+  const normalized = { ...payload };
+
+  // Если есть email, но нет login — переносим значение в login и УДАЛЯЕМ email
+  if (normalized.email && !normalized.login) {
+    normalized.login = normalized.email;
+    delete normalized.email; // Удаляем лишнее поле
+  } else if (normalized.email && normalized.login) {
+    delete normalized.email; // Удаляем, если оба присутствуют
   }
 
-  if (payload.email) {
-    return Object.assign({}, payload, { login: payload.email })
-  }
-
-  return payload
+  return normalized;
 }
