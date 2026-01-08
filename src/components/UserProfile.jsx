@@ -25,16 +25,9 @@ import {
   Paid,
   AccessTime,
   Favorite,
-  ShoppingBag,
-  History,
-  Notifications,
-  Settings,
   Edit,
   Save,
   Cancel,
-  Key,
-  MobileFriendly,
-  Delete,
   Visibility,
   Replay,
   CancelPresentation
@@ -45,10 +38,7 @@ function UserProfile() {
   const [userData, setUserData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(0)
-  const [recentSearches, setRecentSearches] = useState([])
-  const [favorites, setFavorites] = useState([])
   const [orderHistory, setOrderHistory] = useState([])
-  const [notifications, setNotifications] = useState([])
   const [editingProfile, setEditingProfile] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
