@@ -1,5 +1,18 @@
 import { useState, useRef, useCallback } from 'react'
-import './styles/App.css'
+
+import {
+  Box,
+  Container,
+  Typography,
+  IconButton,
+  Badge,
+  Stack,
+  Grid,
+  Chip,
+} from '@mui/material'
+
+import AccountCircleIcon from '@mui/icons-material/AccountCircle'
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
@@ -28,11 +41,13 @@ function App() {
 
   const activeStream = useRef(null)
 
-  const isItemInCart = useCallback((productId, warehouseId) => {
-    return cartItems.some(
-      i => i.productId === productId && i.warehouseId === warehouseId
-    )
-  }, [cartItems])
+  const isItemInCart = useCallback(
+    (productId, warehouseId) =>
+      cartItems.some(
+        i => i.productId === productId && i.warehouseId === warehouseId
+      ),
+    [cartItems]
+  )
 
   const handleSearch = async (query = null) => {
     const term = query || searchQuery.trim()
@@ -58,15 +73,14 @@ function App() {
 
           const idx = prev.findIndex(p => p.groupKey === groupKey)
 
-          // Извлекаем поставщика из различных источников
-          const itemSupplier = item.supplier || 
-                             (item.metadata?.original_data?.supplier) || 
-                             'Неизвестный поставщик'
+          const itemSupplier =
+            item.supplier ||
+            item.metadata?.original_data?.supplier ||
+            'Неизвестный поставщик'
 
-          // Добавляем поставщика в warehouses
           const warehouses = item.warehouses.map(w => ({
             ...w,
-            supplier: w.supplier || itemSupplier, // Используем supplier из склада или из item
+            supplier: w.supplier || itemSupplier,
           }))
 
           if (idx > -1) {
@@ -87,7 +101,7 @@ function App() {
               id: item.id,
               internalId: groupKey,
               groupKey,
-              supplier: itemSupplier, // Сохраняем поставщика
+              supplier: itemSupplier,
               brand: item.brand,
               article: item.article,
               name: item.name,
@@ -101,25 +115,11 @@ function App() {
           ]
         })
 
-        // Обновляем список поставщиков - собираем ВСЕХ поставщиков из товара и складов
         setSuppliers(prev => {
-          const newSuppliers = new Set([...prev])
-          
-          // Добавляем основного поставщика товара
-          const itemSupplier = item.supplier || 
-                             (item.metadata?.original_data?.supplier)
-          if (itemSupplier) {
-            newSuppliers.add(itemSupplier)
-          }
-          
-          // Добавляем поставщиков из всех складов
-          item.warehouses.forEach(w => {
-            if (w.supplier) {
-              newSuppliers.add(w.supplier)
-            }
-          })
-          
-          return newSuppliers
+          const next = new Set(prev)
+          if (item.supplier) next.add(item.supplier)
+          item.warehouses.forEach(w => w.supplier && next.add(w.supplier))
+          return next
         })
       },
 
@@ -186,68 +186,77 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <div className="header-controls">
-        <button className="header-btn account-btn" onClick={() => setShowAccountModal(true)}>
-          <i className="fas fa-user" />
-        </button>
-        <button className="header-btn cart-btn" onClick={() => setShowCartModal(true)}>
-          <i className="fas fa-shopping-cart" />
-          {cartItems.length > 0 && <span className="cart-count">{cartItems.length}</span>}
-        </button>
-      </div>
+    <Box minHeight="100vh" bgcolor="#f7f7f7">
+      {/* Верхние кнопки */}
+      <Box position="fixed" top={16} right={16} zIndex={1000}>
+        <Stack direction="row" spacing={1}>
+          <IconButton color="primary" onClick={() => setShowAccountModal(true)}>
+            <AccountCircleIcon />
+          </IconButton>
+
+          <IconButton color="primary" onClick={() => setShowCartModal(true)}>
+            <Badge badgeContent={cartItems.length} color="error">
+              <ShoppingCartIcon />
+            </Badge>
+          </IconButton>
+        </Stack>
+      </Box>
 
       <Header onExampleSearch={(q) => { setSearchQuery(q); handleSearch(q) }} />
 
-      <div className="container">
+      <Container maxWidth="xl" sx={{ mt: 4 }}>
         <SearchBar
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onSearch={handleSearch}
         />
 
-        <div className="main-content">
+        <Box mt={4}>
           {isLoading && products.length === 0 && <LoadingSpinner />}
           {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
           {products.length > 0 && (
-            <div className="results-section">
-              <div className="results-header">
-                <h2>Найдено товаров: {products.length}</h2>
-                <div className="suppliers-container">
-                  {[...suppliers].map(s => (
-                    <div key={s} className="supplier-badge">{s}</div>
-                  ))}
-                </div>
-              </div>
+            <>
+              <Stack spacing={2} mb={3}>
+                <Typography variant="h6">
+                  Найдено товаров: {products.length}
+                </Typography>
 
-              <div className="products-grid">
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {[...suppliers].map(s => (
+                    <Chip key={s} label={s} size="small" />
+                  ))}
+                </Stack>
+              </Stack>
+
+              <Grid container spacing={2}>
                 {products
                   .sort((a, b) => a.is_cross - b.is_cross)
                   .map((product, index) => (
-                    <ProductCard
-                      key={product.internalId}
-                      product={product}
-                      index={index}
-                      onAddToCart={handleAddToCart}
-                      isItemInCart={isItemInCart}
-                      onOpenImageModal={() =>
-                        setImageModalData({
-                          images: product.images,
-                          productInfo: product,
-                        })
-                      }
-                    />
+                    <Grid item xs={12} sm={6} md={4} lg={3} key={product.internalId}>
+                      <ProductCard
+                        product={product}
+                        index={index}
+                        onAddToCart={handleAddToCart}
+                        isItemInCart={isItemInCart}
+                        onOpenImageModal={() =>
+                          setImageModalData({
+                            images: product.images,
+                            productInfo: product,
+                          })
+                        }
+                      />
+                    </Grid>
                   ))}
-              </div>
-            </div>
+              </Grid>
+            </>
           )}
 
           {!isLoading && products.length === 0 && !error && (
             <EmptyState onExampleSearch={(q) => { setSearchQuery(q); handleSearch(q) }} />
           )}
-        </div>
-      </div>
+        </Box>
+      </Container>
 
       {showCartModal && (
         <CartModal
@@ -262,6 +271,7 @@ function App() {
       )}
 
       {showAccountModal && <AccountModal onClose={() => setShowAccountModal(false)} />}
+
       {imageModalData && (
         <ImageModal
           images={imageModalData.images}
@@ -269,7 +279,7 @@ function App() {
           onClose={() => setImageModalData(null)}
         />
       )}
-    </div>
+    </Box>
   )
 }
 

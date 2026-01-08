@@ -1,12 +1,29 @@
+import {
+  Box,
+  CircularProgress,
+  Typography,
+} from '@mui/material'
+
 function LoadingSpinner() {
   return (
-    <div className="loading active">
-      <div className="spinner"></div>
-      <p style={{ color: 'var(--gray-600)', fontSize: '1.1rem', marginTop: '20px' }}>
+    <Box
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      py={6}
+    >
+      <CircularProgress size={48} />
+
+      <Typography
+        variant="body1"
+        color="text.secondary"
+        mt={2}
+      >
         Ищем запчасти в каталогах поставщиков...
-      </p>
-    </div>
-  );
+      </Typography>
+    </Box>
+  )
 }
 
 export default LoadingSpinner

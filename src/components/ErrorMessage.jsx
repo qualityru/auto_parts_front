@@ -1,18 +1,30 @@
+import {
+  Alert,
+  AlertTitle,
+  IconButton,
+} from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+
 function ErrorMessage({ message, onClose }) {
   return (
-    <div className="error-message active">
-      <div className="error-content">
-        <i className="fas fa-exclamation-triangle"></i>
-        <div className="error-text">
-          <div className="error-title">Произошла ошибка</div>
-          <div>{message}</div>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '8px' }}>
-          <i className="fas fa-times"></i>
-        </button>
-      </div>
-    </div>
-  );
+    <Alert
+      severity="error"
+      sx={{ mb: 2 }}
+      action={
+        <IconButton
+          aria-label="close"
+          color="inherit"
+          size="small"
+          onClick={onClose}
+        >
+          <CloseIcon fontSize="inherit" />
+        </IconButton>
+      }
+    >
+      <AlertTitle>Произошла ошибка</AlertTitle>
+      {message}
+    </Alert>
+  )
 }
 
 export default ErrorMessage

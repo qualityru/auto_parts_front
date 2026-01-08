@@ -1,73 +1,105 @@
 import { useState } from 'react'
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
+  Box,
+  Typography,
+  Stack,
+  Button,
+} from '@mui/material'
+
+import CloseIcon from '@mui/icons-material/Close'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 
 function ImageModal({ images, productInfo, onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const validImages = images.filter(img => img && img.trim() !== '')
-  
+  const validImages = images.filter((img) => img && img.trim() !== '')
+
   if (validImages.length === 0) return null
-  
-  const nextImage = () => {
-    setCurrentIndex((prev) => (prev + 1) % validImages.length)
-  }
-  
-  const prevImage = () => {
-    setCurrentIndex((prev) => (prev - 1 + validImages.length) % validImages.length)
-  }
-  
-  const goToImage = (index) => {
-    setCurrentIndex(index)
-  }
+
+  const nextImage = () => setCurrentIndex((prev) => (prev + 1) % validImages.length)
+  const prevImage = () => setCurrentIndex((prev) => (prev - 1 + validImages.length) % validImages.length)
+  const goToImage = (index) => setCurrentIndex(index)
 
   return (
-    <div className="modal-overlay active" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {productInfo?.brand || ''} {productInfo?.article || ''} - {productInfo?.name || ''}
-          </div>
-          <button className="modal-close" onClick={onClose}>
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
-        <div className="modal-body">
-          <div className="modal-slides" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
-            {validImages.map((src, idx) => (
-              <div key={idx} className="modal-slide">
-                <img src={src} alt={productInfo?.name || 'Изображение'} />
-              </div>
-            ))}
-          </div>
-          
-          {validImages.length > 1 && (
-            <>
-              <div className="modal-nav">
-                <button className="modal-nav-btn" onClick={(e) => { e.stopPropagation(); prevImage(); }}>
-                  <i className="fas fa-chevron-left"></i>
-                </button>
-                <button className="modal-nav-btn" onClick={(e) => { e.stopPropagation(); nextImage(); }}>
-                  <i className="fas fa-chevron-right"></i>
-                </button>
-              </div>
-              
-              <div className="modal-indicators">
-                {validImages.map((_, idx) => (
-                  <div
-                    key={idx}
-                    className={`modal-indicator ${idx === currentIndex ? 'active' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); goToImage(idx); }}
-                  ></div>
-                ))}
-              </div>
-              
-              <div className="modal-counter">
-                {currentIndex + 1} / {validImages.length}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <Dialog
+      open={true}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+    >
+      {/* HEADER */}
+      <DialogTitle
+        sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pr: 1 }}
+      >
+        <Typography variant="subtitle1" noWrap>
+          {productInfo?.brand || ''} {productInfo?.article || ''} - {productInfo?.name || ''}
+        </Typography>
+        <IconButton onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+
+      {/* BODY */}
+      <DialogContent
+        sx={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          p: 2,
+        }}
+      >
+        {/* IMAGE */}
+        <Box
+          component="img"
+          src={validImages[currentIndex]}
+          alt={productInfo?.name || 'Изображение'}
+          sx={{
+            maxHeight: 400,
+            width: 'auto',
+            maxWidth: '100%',
+            objectFit: 'contain',
+          }}
+        />
+
+        {validImages.length > 1 && (
+          <>
+            {/* NAVIGATION */}
+            <Stack direction="row" spacing={2} mt={1}>
+              <IconButton onClick={prevImage}>
+                <ChevronLeftIcon />
+              </IconButton>
+              <IconButton onClick={nextImage}>
+                <ChevronRightIcon />
+              </IconButton>
+            </Stack>
+
+            {/* INDICATORS */}
+            <Stack direction="row" spacing={1} mt={1}>
+              {validImages.map((_, idx) => (
+                <Button
+                  key={idx}
+                  size="small"
+                  variant={idx === currentIndex ? 'contained' : 'outlined'}
+                  onClick={() => goToImage(idx)}
+                  sx={{ minWidth: 24, width: 24, height: 24, p: 0 }}
+                />
+              ))}
+            </Stack>
+
+            {/* COUNTER */}
+            <Typography variant="caption" color="text.secondary" mt={1}>
+              {currentIndex + 1} / {validImages.length}
+            </Typography>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
-export default ImageModal  // Добавьте эту строку
+export default ImageModal

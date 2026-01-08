@@ -1,75 +1,87 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+// Импорт Swiper компонентов и стилей
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Pagination } from 'swiper/modules';
+
+// Обязательные стили Swiper
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/pagination';
+
+/**
+ * Стилизация кнопок Swiper под MUI (опционально)
+ * Swiper использует CSS-переменные для темизации
+ */
+const swiperStyles = {
+  "--swiper-navigation-size": "20px",
+  "--swiper-navigation-color": "#1976d2",
+  "--swiper-pagination-color": "#1976d2",
+  "width": "100%",
+  "height": "100%",
+};
 
 function ImageGallery({ images }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const slidesRef = useRef(null);
+  const validImages = images?.filter((img) => img && img.trim() !== '') || [];
 
-  // Минимальное расстояние в пикселях для срабатывания свайпа
-  const minSwipeDistance = 50;
-
-  const validImages = images.filter(img => img && img.trim() !== '');
-  
-  if (validImages.length === 0) return <div>Нет фото</div>;
-
-  const nextSlide = () => setCurrentIndex((prev) => (prev + 1) % validImages.length);
-  const prevSlide = () => setCurrentIndex((prev) => (prev - 1 + validImages.length) % validImages.length);
-
-  // Обработка начала касания
-  const onTouchStart = (e) => {
-    setTouchEnd(null); // сброс в начале
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  // Обработка движения
-  const onTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
-
-  // Обработка завершения касания
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe) {
-      nextSlide();
-    } else if (isRightSwipe) {
-      prevSlide();
-    }
-  };
-
-  useEffect(() => {
-    if (slidesRef.current) {
-      slidesRef.current.style.transform = `translateX(-${currentIndex * 100}%)`;
-    }
-  }, [currentIndex]);
+  if (validImages.length === 0) {
+    return (
+      <Box
+        display="flex"
+        flexDirection="column"
+        justifyContent="center"
+        alignItems="center"
+        height={200}
+        bgcolor="#f5f7fa"
+        borderRadius={2}
+      >
+        <Typography variant="body2" color="text.secondary">
+          Нет фото
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
-    <div 
-      className="gallery-container"
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      style={{ touchAction: 'pan-y' }} // Важно: разрешает вертикальную прокрутку страницы, но ловит горизонтальные свайпы
-    >
-      <div className="gallery-slides" ref={slidesRef} style={{ display: 'flex', transition: 'transform 0.3s ease-out' }}>
-        {validImages.map((src, index) => (
-          <div key={index} className="gallery-slide" style={{ minWidth: '100%' }}>
-            <img src={src} alt={`Slide ${index}`} style={{ pointerEvents: 'none' }} />
-          </div>
+    <Box sx={{ width: '100%', position: 'relative', height: 250 }}>
+      <Swiper
+        modules={[Navigation, Pagination]}
+        spaceBetween={0}
+        slidesPerView={1}
+        navigation={validImages.length > 1} // Показываем стрелки только если фото > 1
+        pagination={validImages.length > 1 ? { clickable: true } : false}
+        style={swiperStyles}
+      >
+        {validImages.map((src, idx) => (
+          <SwiperSlide key={idx}>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                width: '100%',
+                height: '100%',
+                bgcolor: '#f5f7fa'
+              }}
+            >
+              <Box
+                component="img"
+                src={src}
+                alt={`Product Image ${idx}`}
+                sx={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                }}
+                onError={(e) => {
+                  e.target.src = 'https://via.placeholder.com/400x300?text=Error';
+                }}
+              />
+            </Box>
+          </SwiperSlide>
         ))}
-      </div>
-      
-      {/* Кнопки навигации оставляем без изменений */}
-      {validImages.length > 1 && (
-        <div className="gallery-nav">
-           <button onClick={prevSlide}>←</button>
-           <button onClick={nextSlide}>→</button>
-        </div>
-      )}
-    </div>
+      </Swiper>
+    </Box>
   );
 }
 

@@ -1,4 +1,18 @@
 import React, { useState } from 'react'
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  Typography,
+  Stack,
+  IconButton,
+  CircularProgress,
+} from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import { authorize, confirmEmail, createUser } from '../utils/api'
 
 function AccountModal({ onClose }) {
@@ -30,7 +44,7 @@ function AccountModal({ onClose }) {
       if (token) {
         localStorage.setItem('authToken', token)
         setMessage('Регистрация успешна')
-        onClose && onClose()
+        onClose?.()
       } else {
         setMessage('Регистрация: не получен токен')
       }
@@ -49,7 +63,7 @@ function AccountModal({ onClose }) {
       if (token) {
         localStorage.setItem('authToken', token)
         setMessage('Вход успешен')
-        onClose && onClose()
+        onClose?.()
       } else {
         setMessage('Вход: не получен токен')
       }
@@ -61,51 +75,79 @@ function AccountModal({ onClose }) {
   }
 
   return (
-    <div className="account-modal-overlay active" onClick={onClose}>
-      <div className="account-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="account-modal-header">
-          <div className="account-modal-icon">
-            <i className="fas fa-user-circle"></i>
-          </div>
-          <div className="account-modal-title">Личный кабинет</div>
-          <div className="account-modal-subtitle">Вход / регистрация</div>
-        </div>
+    <Dialog open={true} onClose={onClose} maxWidth="xs" fullWidth>
+      {/* HEADER */}
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <AccountCircleIcon fontSize="large" />
+          <Stack spacing={0}>
+            <Typography variant="h6">Личный кабинет</Typography>
+            <Typography variant="body2" color="text.secondary">Вход / регистрация</Typography>
+          </Stack>
+        </Stack>
+        <IconButton onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="account-modal-body">
-          <div className="form-row">
-            <label>Почта</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
+      {/* BODY */}
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <TextField
+            label="Почта"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            fullWidth
+          />
+          <TextField
+            label="Пароль"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            fullWidth
+          />
 
-          <div className="form-row">
-            <label>Пароль</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" onClick={handleLogin} disabled={loading} fullWidth>
+              {loading ? <CircularProgress size={20} /> : 'Войти'}
+            </Button>
+            <Button variant="outlined" onClick={handleSendCode} disabled={loading} fullWidth>
+              Отправить код
+            </Button>
+          </Stack>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={handleLogin} disabled={loading}>Войти</button>
-            <button onClick={handleSendCode} disabled={loading}>Отправить код</button>
-          </div>
+          <TextField
+            label="Код из письма"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            fullWidth
+          />
 
-          <hr />
+          <Button
+            variant="contained"
+            onClick={handleConfirmCodeAndCreate}
+            disabled={loading}
+            fullWidth
+          >
+            {loading ? <CircularProgress size={20} /> : 'Подтвердить и зарегистрировать'}
+          </Button>
 
-          <div className="form-row">
-            <label>Код из письма</label>
-            <input value={code} onChange={(e) => setCode(e.target.value)} />
-          </div>
+          {message && (
+            <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
+              {message}
+            </Typography>
+          )}
+        </Stack>
+      </DialogContent>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={handleConfirmCodeAndCreate} disabled={loading}>Подтвердить и зарегистрировать</button>
-          </div>
-
-          {message && <div className="account-message">{message}</div>}
-        </div>
-
-        <div className="account-modal-footer">
-          <button className="account-close-btn" onClick={onClose}>Закрыть</button>
-        </div>
-      </div>
-    </div>
+      {/* FOOTER */}
+      <DialogActions>
+        <Button onClick={onClose} color="secondary">
+          Закрыть
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 

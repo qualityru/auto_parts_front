@@ -1,19 +1,43 @@
-import React from 'react';
+import {
+  Box,
+  Container,
+  Typography,
+  Stack,
+} from '@mui/material'
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar'
 
-function Header({ onExampleSearch }) {
+function Header() {
   return (
-    <header>
-      <div className="container">
-        <div className="header-content">
-          <div className="logo">
-            <i className="fas fa-car"></i>
-          </div>
-          <h1>AutoParts Pro</h1>
-          <p className="subtitle">Поиск автозапчастей по артикулу</p>
-        </div>
-      </div>
-    </header>
-  );
+    <Box
+      component="header"
+      sx={{
+        py: 4,
+        background: 'linear-gradient(135deg, #1976d2, #0d47a1)',
+        color: 'white',
+      }}
+    >
+      <Container maxWidth="lg">
+        <Stack
+          spacing={1}
+          alignItems="center"
+          textAlign="center"
+        >
+          <DirectionsCarIcon sx={{ fontSize: 48 }} />
+
+          <Typography variant="h4" fontWeight={700}>
+            AutoParts Pro
+          </Typography>
+
+          <Typography
+            variant="subtitle1"
+            sx={{ opacity: 0.85 }}
+          >
+            Поиск автозапчастей по артикулу
+          </Typography>
+        </Stack>
+      </Container>
+    </Box>
+  )
 }
 
-export default Header;
+export default Header
