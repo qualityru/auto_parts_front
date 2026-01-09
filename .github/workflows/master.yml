@@ -15,10 +15,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'npm' # Автоматическое кэширование зависимостей npm
+          cache: 'npm'
 
       - name: Install dependencies
-        # Используем кэш, чтобы не качать всё заново
         run: npm ci --prefer-offline --no-audit
 
       - name: Set up QEMU
@@ -39,6 +38,5 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/auto_parts_front:latest
-          # Магия ускорения: кэширование слоев Docker внутри GitHub Actions
           cache-from: type=gha
           cache-to: type=gha,mode=max
