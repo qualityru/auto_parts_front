@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -14,46 +14,43 @@ import {
   useScrollTrigger,
   alpha,
   useTheme,
-  TextField,
-  InputAdornment,
-} from '@mui/material'
-import { styled } from '@mui/material/styles'
-import SearchIcon from '@mui/icons-material/Search'
-import DirectionsCarFilledIcon from '@mui/icons-material/DirectionsCarFilled'
-import AccountCircleIcon from '@mui/icons-material/AccountCircle'
-import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone'
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
-import Brightness4Icon from '@mui/icons-material/Brightness4'
-import Brightness7Icon from '@mui/icons-material/Brightness7'
-import { useNavigate } from 'react-router-dom'
+  Tooltip
+} from '@mui/material';
+import { styled } from '@mui/material/styles';
+import SearchIcon from '@mui/icons-material/Search';
+import DirectionsCarFilledIcon from '@mui/icons-material/DirectionsCarFilled';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { useNavigate } from 'react-router-dom';
 
-// Импортируем нашу новую корзину
-import CartDrawer from './CartModal'
+// Импорт корзины
+import CartDrawer from './CartModal';
 
-// Стилизованный контейнер для поиска
+// Ультрасовременный контейнер поиска с эффектом фокусировки
 const Search = styled('div')(({ theme }) => ({
   position: 'relative',
-  borderRadius: '12px',
-  backgroundColor: alpha(
-    theme.palette.common.white,
-    theme.palette.mode === 'light' ? 0.15 : 0.06
-  ),
-  '&:hover': {
-    backgroundColor: alpha(
-      theme.palette.common.white,
-      theme.palette.mode === 'light' ? 0.25 : 0.09
-    ),
-  },
-  marginRight: theme.spacing(2),
-  marginLeft: 0,
+  borderRadius: '16px',
+  backgroundColor: alpha(theme.palette.common.white, 0.1),
+  border: `1px solid ${alpha(theme.palette.common.white, 0.1)}`,
+  display: 'flex',
+  alignItems: 'center',
+  transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
   width: '100%',
-  [theme.breakpoints.up('sm')]: {
-    marginLeft: theme.spacing(3),
-    width: 'auto',
+  maxWidth: '500px',
+  '&:hover': {
+    backgroundColor: alpha(theme.palette.common.white, 0.15),
+    border: `1px solid ${alpha(theme.palette.common.white, 0.25)}`,
   },
-  transition: 'all 0.3s ease',
-  cursor: 'text', // Указывает, что поле активно
-}))
+  '&:focus-within': {
+    backgroundColor: alpha(theme.palette.common.white, 0.2),
+    boxShadow: `0 8px 32px 0 ${alpha(theme.palette.common.black, 0.2)}`,
+    maxWidth: '600px',
+    borderColor: alpha(theme.palette.common.white, 0.5),
+  },
+}));
 
 const SearchIconWrapper = styled('div')(({ theme }) => ({
   padding: theme.spacing(0, 2),
@@ -63,235 +60,188 @@ const SearchIconWrapper = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  zIndex: 1, // Чтобы иконка не мешала клику, если нужно
-}))
+  color: alpha(theme.palette.common.white, 0.7),
+}));
 
 const StyledInputBase = styled(InputBase)(({ theme }) => ({
   color: 'inherit',
-  width: '100%', // Растягиваем на всю ширину Search
+  width: '100%',
   '& .MuiInputBase-input': {
-    padding: theme.spacing(1, 1, 1, 0),
-    // Отступ слева (1em + 4 * 8px) чтобы текст начинался после иконки
+    padding: theme.spacing(1.2, 1, 1.2, 0),
     paddingLeft: `calc(1em + ${theme.spacing(4)})`,
-    transition: theme.transitions.create('width'),
-    width: '100%',
-    [theme.breakpoints.up('md')]: {
-      width: '30ch',
-      '&:focus': { width: '40ch' },
+    fontSize: '0.95rem',
+    '&::placeholder': {
+      color: alpha(theme.palette.common.white, 0.6),
+      opacity: 1,
     },
-    // Убираем лишние пустые зоны для клика
-    display: 'block', 
-    height: '100%',
   },
-}))
+}));
 
 function Header({ 
   onAccountClick, 
-  onExampleSearch,
-  searchQuery: externalSearchQuery,
+  searchQuery, 
+  setSearchQuery, 
   onSearch,
-  setSearchQuery: externalSetSearchQuery,
   cartItems = [],
   onRemoveItem,
   onUpdateQuantity,
   onClearCart,
   getCartTotal,
-  themeMode = 'light',
-  onToggleTheme = null,
+  themeMode,
+  onToggleTheme 
 }) {
-  const navigate = useNavigate()
-  const theme = useTheme()
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [localSearchQuery, setLocalSearchQuery] = useState('')
-  
-  // Состояние для открытия боковой корзины
-  const [isCartOpen, setIsCartOpen] = useState(false)
-  
-  const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : localSearchQuery
-  const setSearchQuery = externalSetSearchQuery || setLocalSearchQuery
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // Проверка авторизации
   useEffect(() => {
-    const token = localStorage.getItem('authToken')
-    setIsLoggedIn(!!token)
-  }, [])
+    const token = localStorage.getItem('authToken');
+    setIsLoggedIn(!!token);
+  }, []);
 
-  const trigger = useScrollTrigger({
-    disableHysteresis: true,
-    threshold: 0,
-  })
-
-  const appBarBg = trigger
-    ? (theme.palette.mode === 'light'
-      ? 'rgba(25, 118, 210, 0.8)'
-      : 'rgba(11,95,168,0.92)')
-    : (theme.palette.mode === 'light'
-      ? 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)'
-      : 'linear-gradient(135deg, #0b5fa8 0%, #0a4a87 100%)')
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch()
-    }
-  }
+  const trigger = useScrollTrigger({ disableHysteresis: true, threshold: 20 });
 
   const handleSearch = () => {
-    if (onSearch) {
-      onSearch()
-    } else if (onExampleSearch && searchQuery.trim()) {
-      onExampleSearch(searchQuery.trim())
+    if (searchQuery?.trim()) {
+      onSearch(searchQuery.trim());
     }
-  }
+  };
 
-  const handleLogoClick = () => {
-    navigate('/')
-    setSearchQuery('')
-    if (onExampleSearch) {
-      onExampleSearch('')
-    }
-  }
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSearch();
+  };
 
   return (
     <>
       <AppBar
         position="sticky"
-        elevation={trigger ? 4 : 0}
+        elevation={trigger ? 8 : 0}
         sx={{
-          background: appBarBg,
-          backdropFilter: 'blur(10px)',
+          background: trigger 
+            ? (theme.palette.mode === 'light' ? 'rgba(25, 118, 210, 0.9)' : 'rgba(10, 25, 41, 0.9)')
+            : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+          backdropFilter: 'blur(12px)',
           transition: 'all 0.3s ease-in-out',
-          py: trigger ? 0.5 : 1,
           zIndex: theme.zIndex.drawer + 1,
         }}
       >
         <Container maxWidth="xl">
-          <Toolbar disableGutters>
+          <Toolbar disableGutters sx={{ height: trigger ? 70 : 85, transition: '0.3s' }}>
+            
             {/* LOGO */}
             <Stack 
               direction="row" 
+              spacing={1.5} 
               alignItems="center" 
-              spacing={1} 
-              sx={{ cursor: 'pointer' }}
-              onClick={handleLogoClick}
+              onClick={() => { navigate('/'); setSearchQuery(''); }}
+              sx={{ cursor: 'pointer', minWidth: 'fit-content', mr: 2 }}
             >
-              <DirectionsCarFilledIcon sx={{ fontSize: 32, display: { xs: 'none', md: 'flex' } }} />
-              <Typography
-                variant="h5"
-                noWrap
-                sx={{
-                  fontWeight: 800,
-                  letterSpacing: '-0.5px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1
-                }}
-              >
+              <Box sx={{ 
+                p: 1, 
+                bgcolor: alpha('#fff', 0.2), 
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}>
+                <DirectionsCarFilledIcon sx={{ fontSize: 28, color: '#fff' }} />
+              </Box>
+              <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-1px', display: { xs: 'none', md: 'block' } }}>
                 BogTar<Box component="span" sx={{ color: '#90caf9' }}>:)</Box>
               </Typography>
             </Stack>
 
-            {/* SEARCH BAR - Desktop */}
-            <Search sx={{ flexGrow: 1, display: { xs: 'none', sm: 'block' } }}>
-              <SearchIconWrapper>
-                <SearchIcon />
-              </SearchIconWrapper>
-              <StyledInputBase
-                placeholder="Поиск по артикулу (например, W9142)..."
-                inputProps={{ 'aria-label': 'search' }}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                fullWidth
-              />
-            </Search>
-
-            {/* SEARCH BAR - Mobile */}
-            <Box sx={{ 
-              flexGrow: 1, 
-              display: { xs: 'flex', sm: 'none' },
-              justifyContent: 'center',
-              mx: 1
-            }}>
-              <TextField
-                fullWidth
-                size="small"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Поиск..."
-                variant="outlined"
-                sx={{ 
-                  bgcolor: alpha(theme.palette.common.white, 0.15),
-                  borderRadius: '8px',
-                  '& fieldset': { border: 'none' },
-                  // Делаем область кликабельной по всей высоте
-                  '& .MuiInputBase-root': {
-                    cursor: 'text',
-                    color: 'white'
-                  },
-                }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon sx={{ color: 'white' }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+            {/* SEARCH BAR */}
+            <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: 2 }}>
+              <Search>
+                <SearchIconWrapper>
+                  <SearchIcon />
+                </SearchIconWrapper>
+                <StyledInputBase
+                  placeholder="VIN или артикул детали..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                />
+                {searchQuery?.length > 0 && (
+                  <IconButton 
+                    size="small" 
+                    onClick={handleSearch}
+                    sx={{ 
+                      mr: 1, 
+                      bgcolor: alpha('#fff', 0.1),
+                      color: '#fff',
+                      '&:hover': { bgcolor: alpha('#fff', 0.25) }
+                    }}
+                  >
+                    <ArrowForwardIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Search>
             </Box>
 
             {/* ACTIONS */}
-            <Stack direction="row" spacing={1} alignItems="center">
-              <IconButton
-                color="inherit"
-                onClick={() => onToggleTheme?.()}
-                sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-              >
-                {themeMode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
-              </IconButton>
+            <Stack direction="row" spacing={{ xs: 0.5, sm: 2 }} alignItems="center">
+              <Tooltip title="Сменить тему">
+                <IconButton color="inherit" onClick={onToggleTheme} sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+                  {themeMode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
+                </IconButton>
+              </Tooltip>
 
-              <IconButton 
-                color="inherit" 
-                onClick={() => setIsCartOpen(true)}
-              >
+              <IconButton color="inherit" onClick={() => setIsCartOpen(true)}>
                 <Badge 
-                  badgeContent={cartItems.reduce((acc, item) => acc + item.quantity, 0)} 
+                  badgeContent={cartItems.reduce((acc, i) => acc + i.quantity, 0)} 
                   color="error"
+                  sx={{ '& .MuiBadge-badge': { fontWeight: 700 } }}
                 >
                   <ShoppingCartIcon />
-                </Badge>
-              </IconButton>
-
-              <IconButton color="inherit" sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
-                <Badge badgeContent={4} color="error">
-                  <NotificationsNoneIcon />
                 </Badge>
               </IconButton>
 
               {isLoggedIn ? (
                 <IconButton 
                   onClick={() => navigate('/profile')} 
-                  sx={{ p: 0.5, border: `2px solid ${alpha('#fff', 0.2)}` }}
+                  sx={{ 
+                    p: 0.5, 
+                    border: `2px solid ${alpha('#fff', 0.3)}`,
+                    transition: '0.2s',
+                    '&:hover': { transform: 'scale(1.05)' }
+                  }}
                 >
-                  <Avatar sx={{ width: 35, height: 35, bgcolor: '#90caf9', color: '#0d47a1' }}>
-                    <AccountCircleIcon />
+                  <Avatar sx={{ width: 32, height: 32, bgcolor: '#90caf9', color: '#0d47a1' }}>
+                    <AccountCircleIcon fontSize="small" />
                   </Avatar>
                 </IconButton>
               ) : (
-                <Button
-                  variant="contained"
-                  disableElevation
-                  startIcon={<AccountCircleIcon />}
-                  onClick={onAccountClick}
-                  sx={{
-                    bgcolor: alpha('#fff', 0.2),
-                    borderRadius: '10px',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    '&:hover': { bgcolor: alpha('#fff', 0.3) }
-                  }}
-                >
-                  Войти
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    onClick={onAccountClick}
+                    startIcon={<AccountCircleIcon />}
+                    sx={{
+                      display: { xs: 'none', md: 'flex' },
+                      bgcolor: alpha('#fff', 0.15),
+                      backdropFilter: 'blur(4px)',
+                      borderRadius: '12px',
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      px: 3,
+                      border: `1px solid ${alpha('#fff', 0.1)}`,
+                      '&:hover': { 
+                        bgcolor: alpha('#fff', 0.25),
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+                      }
+                    }}
+                  >
+                    Войти
+                  </Button>
+                  <IconButton 
+                    sx={{ display: { xs: 'flex', md: 'none' }, color: 'white' }} 
+                    onClick={onAccountClick}
+                  >
+                    <AccountCircleIcon />
+                  </IconButton>
+                </>
               )}
             </Stack>
           </Toolbar>
@@ -308,7 +258,7 @@ function Header({
         getCartTotal={getCartTotal}
       />
     </>
-  )
+  );
 }
 
-export default Header
+export default Header;

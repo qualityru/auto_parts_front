@@ -1,297 +1,365 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
+import React, { useState, useRef, useMemo } from 'react';
 import {
-  Box,
-  Container,
-  Typography,
-  Stack,
-  Grid,
-  Chip,
-  CssBaseline,
-} from '@mui/material'
-import { createTheme, ThemeProvider } from '@mui/material/styles'
+  Box, Container, Typography, Stack, Grid, CssBaseline, Divider,
+  List, ListItem, ListItemText, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Breadcrumbs, Link, Card,
+  CardContent, Accordion, AccordionSummary, AccordionDetails,
+  Button
+} from '@mui/material';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import SearchIcon from '@mui/icons-material/Search';
 
-import Header from './components/Header'
-import ProductCard from './components/ProductCard'
-import LoadingSpinner from './components/LoadingSpinner'
-import ErrorMessage from './components/ErrorMessage'
-import EmptyState from './components/EmptyState'
-import AccountModal from './components/AccountModal'
-import ImageModal from './components/ImageModal'
-import MainBody from './components/MainBody'
-import Footer from './components/Footer'
+// Swiper & Zoom
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Pagination } from 'swiper/modules';
+import Zoom from 'react-medium-image-zoom';
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/pagination';
+import 'react-medium-image-zoom/dist/styles.css';
 
-import { searchProductsStream } from './utils/api'
+import Header from './components/Header';
+import ProductCard from './components/ProductCard';
+import LoadingSpinner from './components/LoadingSpinner';
+import ErrorMessage from './components/ErrorMessage';
+import MainBody from './components/MainBody';
+import Footer from './components/Footer';
+
+import { getCarsByVin, getPartsByCarId, searchProductsStream, getEntitiesByCode } from './utils/api';
+
+const renderSafeText = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return value.name || value.id || '---';
+  return String(value);
+};
+
+const structurePartsData = (partsList) => {
+  if (!Array.isArray(partsList)) return {};
+  const tree = {};
+  partsList.forEach((part, index) => {
+    const l1 = part.groups?.find(g => g.level === 1) || { id: 'l1-0', name: 'Общее' };
+    const l2 = part.groups?.find(g => g.level === 2) || { id: 'l2-0', name: 'Разное' };
+    const l1Id = String(l1.id);
+    const l2Id = String(l2.id);
+    if (!tree[l1Id]) tree[l1Id] = { name: renderSafeText(l1.name), subGroups: {} };
+    if (!tree[l1Id].subGroups[l2Id]) tree[l1Id].subGroups[l2Id] = { name: renderSafeText(l2.name), parts: [] };
+    tree[l1Id].subGroups[l2Id].parts.push({
+      ...part,
+      code: renderSafeText(part.code),
+      name: renderSafeText(part.name),
+      key: `part-${index}-${part.code}`
+    });
+  });
+  return tree;
+};
 
 function App() {
-  const [themeMode, setThemeMode] = useState('light')
+  const [themeMode, setThemeMode] = useState('light');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Состояния данных
+  const [products, setProducts] = useState([]); 
+  const [cars, setCars] = useState([]); 
+  const [carParts, setCarParts] = useState(null); 
+  const [selectedSubGroup, setSelectedSubGroup] = useState(null);
+  const [selectedCarInfo, setSelectedCarInfo] = useState(null);
+  const [activePart, setActivePart] = useState(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem('themeMode')
-    if (stored === 'light' || stored === 'dark') setThemeMode(stored)
-  }, [])
-
-  const toggleTheme = () => {
-    setThemeMode(prev => {
-      const next = prev === 'light' ? 'dark' : 'light'
-      localStorage.setItem('themeMode', next)
-      return next
-    })
-  }
+  const activeStream = useRef(null);
 
   const theme = useMemo(() => createTheme({
-    palette: {
+    palette: { 
       mode: themeMode,
-      ...(themeMode === 'light'
-        ? { background: { default: '#f7f7f7' } }
-        : { background: { default: '#0f1720' } }),
-      primary: { main: '#1976d2' },
+      primary: { main: '#005387' }, 
+      background: { default: themeMode === 'light' ? '#f4f7f9' : '#0a1016' }
     },
-    shape: { borderRadius: 12 },
-    components: {
-      MuiAppBar: { defaultProps: { enableColorOnDark: true } },
-    },
-  }), [themeMode])
+    typography: { fontFamily: '"Inter", sans-serif' },
+    shape: { borderRadius: 12 }
+  }), [themeMode]);
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [products, setProducts] = useState([])
-  const [suppliers, setSuppliers] = useState(new Set())
-  const [cartItems, setCartItems] = useState([])
-  const [showAccountModal, setShowAccountModal] = useState(false)
-  const [imageModalData, setImageModalData] = useState(null)
+  // Функция полного сброса в начало
+  const resetToHome = () => {
+    setCarParts(null);
+    setSelectedCarInfo(null);
+    setActivePart(null);
+    setProducts([]);
+    setCars([]);
+    setSearchQuery('');
+    if (activeStream.current) activeStream.current.abort();
+  };
 
-  const activeStream = useRef(null)
+  // Поиск (VIN или Артикул)
+  const handleUniversalSearch = async (query) => {
+    const term = query?.trim() || searchQuery.trim();
+    if (!term) return;
 
-  // --- ЛОГИКА КОРЗИНЫ (ПОЛНОСТЬЮ СОХРАНЕНА) ---
-  const getCartTotal = useCallback(() => {
-    return cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-  }, [cartItems])
+    if (activeStream.current) activeStream.current.abort();
+    setIsLoading(true);
+    setError(null);
+    setSearchQuery(term);
 
-  const handleAddToCart = (product, warehouse) => {
-    setCartItems(prev => {
-      const idx = prev.findIndex(i => i.productId === product.internalId && i.warehouseId === warehouse.id)
-      if (idx > -1) {
-        const copy = [...prev]
-        copy[idx].quantity += 1
-        return copy
-      }
-      return [...prev, {
-        productId: product.internalId,
-        warehouseId: warehouse.id,
-        brand: product.brand,
-        article: product.article,
-        name: product.name,
-        image: product.images?.[0] || '',
-        price: warehouse.price,
-        currency: warehouse.currency,
-        quantity: 1,
-        warehouseName: warehouse.name,
-        supplier: warehouse.supplier || product.supplier,
-      }]
-    })
-  }
+    const isVin = /^[A-HJ-NPR-Z0-9]{17}$/i.test(term);
 
-  const handleRemoveFromCart = (productId, warehouseId) => {
-    setCartItems(prev => prev.filter(i => !(i.productId === productId && i.warehouseId === warehouseId)))
-  }
-
-  const handleUpdateQuantity = (productId, warehouseId, newQuantity) => {
-    if (newQuantity < 1) return
-    setCartItems(prev => prev.map(item => 
-      (item.productId === productId && item.warehouseId === warehouseId) ? { ...item, quantity: newQuantity } : item
-    ))
-  }
-
-  const handleClearCart = () => {
-    if (window.confirm('Вы уверены, что хотите очистить корзину?')) setCartItems([])
-  }
-
-  const isItemInCart = useCallback((productId, warehouseId) =>
-    cartItems.some(i => i.productId === productId && i.warehouseId === warehouseId),
-    [cartItems]
-  )
-
-  // --- ПОИСК (ПОЛНОСТЬЮ СОХРАНЕН) ---
-  const handleSearch = async (query = null) => {
-    const term = query || searchQuery.trim()
-    if (!term) {
-      setError('Введите артикул')
-      return
+    if (isVin) {
+      resetToHome();
+      setIsLoading(true); // Возвращаем loading после сброса
+      try {
+        const res = await getCarsByVin(term);
+        const list = res.list || (Array.isArray(res) ? res : []);
+        setCars(list);
+        if (list.length === 0) setError("Автомобиль не найден");
+      } catch (err) { setError(err.message); } finally { setIsLoading(false); }
+    } else {
+      // Поиск только запчастей (Артикул)
+      setCars([]);
+      setProducts([]);
+      // Если мы ищем артикул, мы "выходим" из каталога машины в общий поиск
+      const stream = searchProductsStream(term, {
+        onItem: (item) => {
+          setProducts(prev => {
+            const groupKey = `${renderSafeText(item.brand)}-${renderSafeText(item.article)}`.toLowerCase().replace(/\s+/g, '');
+            if (prev.find(p => p.groupKey === groupKey)) return prev;
+            return [...prev, { ...item, internalId: groupKey, groupKey, warehouses: item.warehouses || [], images: item.images || [] }];
+          });
+        },
+        onDone: () => setIsLoading(false),
+        onError: (err) => { setError(err.message); setIsLoading(false); }
+      });
+      activeStream.current = stream;
+      await stream.start();
     }
-    if (activeStream.current) activeStream.current.abort()
+  };
 
-    setIsLoading(true)
-    setError(null)
-    setProducts([])
-    setSuppliers(new Set())
-    setSearchQuery(term)
+  const handleArticleSelect = async (part) => {
+    setActivePart(part);
+    try {
+      const entities = await getEntitiesByCode(part.code);
+      const detail = entities?.list?.[0];
+      if (detail) {
+        setActivePart(prev => ({
+          ...prev,
+          images: detail.images || [],
+          brand: renderSafeText(detail.brand),
+          fullName: renderSafeText(detail.originalName) || part.name
+        }));
+      }
+    } catch (err) { console.warn(err); }
+  };
 
-    const stream = searchProductsStream(term, {
-      onItem: (item) => {
-        setProducts(prev => {
-          const groupKey = `${item.brand}-${item.article}`.toLowerCase().replace(/\s+/g, '')
-          const idx = prev.findIndex(p => p.groupKey === groupKey)
-          const itemSupplier = item.supplier || item.metadata?.original_data?.supplier || 'Неизвестный поставщик'
-          const warehouses = item.warehouses.map(w => ({ ...w, supplier: w.supplier || itemSupplier }))
+  const handleSelectCar = async (car) => {
+    setIsLoading(true);
+    setCars([]);
+    setSelectedCarInfo({ 
+      id: car.id, 
+      brand: renderSafeText(car.brand), 
+      model: renderSafeText(car.model),
+      full: car 
+    });
+    try {
+      const data = await getPartsByCarId(car.id);
+      if (data?.list) setCarParts(structurePartsData(data.list));
+    } catch (err) { setError(err.message); } finally { setIsLoading(false); }
+  };
 
-          if (idx > -1) {
-            const updated = [...prev]
-            updated[idx] = {
-              ...updated[idx],
-              warehouses: [...updated[idx].warehouses, ...warehouses],
-              images: updated[idx].images || item.images || [],
-              name: updated[idx].name || item.name,
-              description: updated[idx].description || item.description,
-            }
-            return updated
-          }
+  // Переход к ценам с сохранением возможности вернуться
+  const goToPrices = (code) => {
+    // Мы НЕ обнуляем selectedCarInfo, чтобы крошки остались
+    setCarParts(null); 
+    handleUniversalSearch(code);
+  };
 
-          return [...prev, {
-            id: item.id,
-            internalId: groupKey,
-            groupKey,
-            supplier: itemSupplier,
-            brand: item.brand,
-            article: item.article,
-            name: item.name,
-            description: item.description,
-            images: item.images || [],
-            specifications: item.specifications || {},
-            metadata: item.metadata || {},
-            is_cross: item.metadata?.is_cross || false,
-            warehouses,
-          }]
-        })
-
-        setSuppliers(prev => {
-          const next = new Set(prev)
-          if (item.supplier) next.add(item.supplier)
-          item.warehouses.forEach(w => w.supplier && next.add(w.supplier))
-          return next
-        })
-      },
-      onImages: ({ article, images }) => {
-        setProducts(prev => prev.map(p => p.article.toLowerCase() === article.toLowerCase()
-          ? { ...p, images: Array.from(new Set([...(p.images || []), ...images])) } : p
-        ))
-      },
-      onError: (err) => {
-        setError(`Ошибка поиска: ${err.error || err}`)
-        setIsLoading(false)
-      },
-      onDone: () => setIsLoading(false),
-      onEnd: () => setIsLoading(false),
-    })
-
-    activeStream.current = stream
-    await stream.start()
-  }
+  // Возврат из цен обратно в каталог машины
+  const backToCatalog = async () => {
+    if (selectedCarInfo) {
+      setProducts([]);
+      setIsLoading(true);
+      try {
+        const data = await getPartsByCarId(selectedCarInfo.id);
+        if (data?.list) setCarParts(structurePartsData(data.list));
+      } catch (err) { setError(err.message); } finally { setIsLoading(false); }
+    }
+  };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box display="flex" flexDirection="column" minHeight="100vh" sx={{ bgcolor: 'background.default' }}>
+      <Box display="flex" flexDirection="column" minHeight="100vh">
         <Header 
-          onAccountClick={() => setShowAccountModal(true)}
-          onExampleSearch={(q) => {
-            if (q === '') {
-              setSearchQuery('')
-              setProducts([])
-              setError(null)
-            } else {
-              setSearchQuery(q)
-              handleSearch(q)
-            }
-          }}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          onSearch={() => handleSearch()}
-          cartItems={cartItems}
-          onRemoveItem={handleRemoveFromCart}
-          onUpdateQuantity={handleUpdateQuantity}
-          onClearCart={handleClearCart}
-          getCartTotal={getCartTotal}
-          themeMode={themeMode}
-          onToggleTheme={toggleTheme}
+          searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+          onSearch={() => handleUniversalSearch()} themeMode={themeMode}
+          onToggleTheme={() => setThemeMode(t => t === 'light' ? 'dark' : 'light')}
         />
 
-        <Container maxWidth="xl" sx={{ mt: 4, pb: 4, flex: 1 }}>
-          <Box mt={4}>
-            {/* 1. Если ничего не искали - MainBody */}
-            {!isLoading && products.length === 0 && !error && searchQuery === '' && (
-              <MainBody onExampleSearch={(q) => {
-                setSearchQuery(q)
-                handleSearch(q)
-              }} />
-            )}
+        <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
+          
+          {/* Умные хлебные крошки */}
+          {(selectedCarInfo || products.length > 0 || carParts) && (
+            <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">
+                Главная
+              </Link>
+              
+              {selectedCarInfo && (
+                <Link component="button" variant="body2" onClick={backToCatalog} underline="hover" color={carParts ? "primary" : "inherit"} sx={{ fontWeight: carParts ? 700 : 400 }}>
+                  {selectedCarInfo.brand} {selectedCarInfo.model}
+                </Link>
+              )}
 
-            {/* 2. Загрузка */}
-            {isLoading && products.length === 0 && (
-              <Box display="flex" justifyContent="center" py={10}>
-                <LoadingSpinner />
-              </Box>
-            )}
+              {products.length > 0 && !carParts && (
+                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
+                  Цены: {searchQuery}
+                </Typography>
+              )}
+            </Breadcrumbs>
+          )}
 
-            {/* 3. Ошибка */}
-            {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
+          {error && <ErrorMessage message={String(error)} onClose={() => setError(null)} />}
 
-            {/* 4. Результаты (С центрированием) */}
-            {products.length > 0 && (
-              <>
-                <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" mb={3} spacing={2}>
-                  <Box textAlign={{ xs: 'center', sm: 'left' }}>
-                    <Typography variant="h5" fontWeight="700">Результаты поиска</Typography>
-                    <Typography variant="body2" color="text.secondary">Найдено позиций: {products.length}</Typography>
-                  </Box>
-                  <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center">
-                    {[...suppliers].map(s => (
-                      <Chip key={s} label={s} size="small" variant="outlined" />
-                    ))}
-                  </Stack>
+          {isLoading && products.length === 0 ? (
+            <LoadingSpinner />
+          ) : carParts ? (
+            <Grid container spacing={2}>
+              {/* Лево: Дерево */}
+              <Grid item xs={12} md={3}>
+                <Stack spacing={0.5} sx={{ maxHeight: '75vh', overflowY: 'auto' }}>
+                  {Object.entries(carParts).map(([id, group]) => (
+                    <Accordion key={id} disableGutters elevation={0} sx={{ bgcolor: 'transparent', borderBottom: '1px solid #eee' }}>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{renderSafeText(group.name)}</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ p: 0 }}>
+                        <List dense disablePadding>
+                          {Object.entries(group.subGroups).map(([sid, sub]) => (
+                            <ListItem 
+                              button 
+                              key={sid} 
+                              onClick={() => {
+                                setSelectedSubGroup(sub);
+                                if (sub.parts?.length > 0) handleArticleSelect(sub.parts[0]);
+                              }} 
+                              selected={selectedSubGroup?.name === sub.name}
+                              sx={{ py: 0.5, pl: 4 }}
+                            >
+                              <ListItemText primary={renderSafeText(sub.name)} primaryTypographyProps={{ fontSize: '0.75rem' }} />
+                            </ListItem>
+                          ))}
+                        </List>
+                      </AccordionDetails>
+                    </Accordion>
+                  ))}
                 </Stack>
+              </Grid>
 
-                <Grid container spacing={3} justifyContent="center">
-                  {products
-                    .sort((a, b) => a.is_cross - b.is_cross)
-                    .map((product, index) => (
-                      <Grid item xs={12} sm={6} md={4} lg={3} key={product.internalId} sx={{ display: 'flex', justifyContent: 'center' }}>
-                        <ProductCard
-                          product={product}
-                          index={index}
-                          onAddToCart={handleAddToCart}
-                          isItemInCart={isItemInCart}
-                          onOpenImageModal={() => setImageModalData({ images: product.images, productInfo: product })}
-                        />
-                      </Grid>
-                    ))}
+              {/* Центр: Схема */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2, height: '75vh', display: 'flex', flexDirection: 'column', borderRadius: 4, bgcolor: '#fff' }}>
+                  {activePart ? (
+                    <>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                          {renderSafeText(activePart.code)} — {renderSafeText(activePart.name)}
+                        </Typography>
+                        <Button 
+                          size="small" 
+                          variant="contained" 
+                          startIcon={<SearchIcon />}
+                          onClick={() => goToPrices(activePart.code)}
+                          sx={{ borderRadius: 2 }}
+                        >
+                          Найти цены
+                        </Button>
+                      </Box>
+                      <Divider sx={{ mb: 2 }} />
+                      <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+                        {activePart.images?.length > 0 ? (
+                          <Zoom><img src={activePart.images[0]} alt="схема" style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }} /></Zoom>
+                        ) : (
+                          <Stack alignItems="center" spacing={1} sx={{ opacity: 0.2 }}>
+                            <PhotoCameraIcon sx={{ fontSize: 80 }} />
+                            <Typography>Изображение отсутствует</Typography>
+                          </Stack>
+                        )}
+                      </Box>
+                    </>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                      <Typography color="text.secondary">Выберите узел для просмотра</Typography>
+                    </Box>
+                  )}
+                </Paper>
+              </Grid>
+
+              {/* Право: Таблица */}
+              <Grid item xs={12} md={3}>
+                {selectedSubGroup && (
+                  <TableContainer component={Paper} variant="outlined" sx={{ height: '75vh', borderRadius: 3 }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>OEM / Название</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {selectedSubGroup.parts.map((part) => (
+                          <TableRow 
+                            key={part.key} 
+                            hover 
+                            onClick={() => handleArticleSelect(part)} 
+                            selected={activePart?.code === part.code} 
+                            sx={{ cursor: 'pointer' }}
+                          >
+                            <TableCell>
+                              <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem' }}>{renderSafeText(part.code)}</Typography>
+                              <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>{renderSafeText(part.name)}</Typography>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Grid>
+            </Grid>
+          ) : cars.length > 0 ? (
+            <Grid container spacing={2}>
+              {cars.map((car) => (
+                <Grid item xs={12} sm={4} key={car.id}>
+                  <Card variant="outlined" sx={{ cursor: 'pointer', borderRadius: 4, '&:hover': { borderColor: 'primary.main' } }} onClick={() => handleSelectCar(car)}>
+                    <CardContent>
+                      <Typography fontWeight={800} color="primary">{renderSafeText(car.brand)} {renderSafeText(car.model)}</Typography>
+                      <Typography variant="body2" color="text.secondary">{renderSafeText(car.year)} • {renderSafeText(car.engine_code)}</Typography>
+                    </CardContent>
+                  </Card>
                 </Grid>
-              </>
-            )}
-
-            {/* 5. Пусто после поиска */}
-            {!isLoading && products.length === 0 && !error && searchQuery !== '' && (
-              <EmptyState onExampleSearch={(q) => {
-                setSearchQuery(q)
-                handleSearch(q)
-              }} />
-            )}
-          </Box>
+              ))}
+            </Grid>
+          ) : products.length > 0 ? (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Предложения для: {searchQuery}</Typography>
+              <Grid container spacing={2}>
+                {products.map(p => (
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}>
+                    <ProductCard 
+                      product={p} 
+                      onAddToCart={() => {}} 
+                      isItemInCart={() => false} 
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          ) : (
+            <MainBody onExampleSearch={(q) => handleUniversalSearch(q)} />
+          )}
         </Container>
-
         <Footer />
-
-        {showAccountModal && <AccountModal onClose={() => setShowAccountModal(false)} />}
-        {imageModalData && (
-          <ImageModal
-            images={imageModalData.images}
-            productInfo={imageModalData.productInfo}
-            onClose={() => setImageModalData(null)}
-          />
-        )}
       </Box>
     </ThemeProvider>
-  )
+  );
 }
 
-export default App
+export default App;

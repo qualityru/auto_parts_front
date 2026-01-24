@@ -42,25 +42,6 @@ const MainBody = ({ onExampleSearch }) => {
         <Typography variant="h5" color="text.secondary" sx={{ maxWidth: 700, mx: 'auto', mb: 4 }}>
           Профессиональная экосистема для подбора деталей. Быстро, точно, надежно.
         </Typography>
-        
-        <Stack direction="row" spacing={2} justifyContent="center">
-          <Button 
-            variant="contained" 
-            size="large" 
-            onClick={() => onExampleSearch('8888')}
-            sx={{ borderRadius: 8, px: 4, py: 1.5, fontWeight: 'bold' }}
-          >
-            Попробовать 8888
-          </Button>
-          <Button 
-            variant="outlined" 
-            size="large" 
-            onClick={() => onExampleSearch('OC90')}
-            sx={{ borderRadius: 8, px: 4, py: 1.5, fontWeight: 'bold' }}
-          >
-            Пример OC90
-          </Button>
-        </Stack>
       </Box>
 
       {/* Features Grid */}

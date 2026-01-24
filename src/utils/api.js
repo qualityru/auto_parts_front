@@ -1,5 +1,5 @@
-// const BASE = 'http://127.0.0.1:8015/api';
-const BASE = 'https://bogtar.duckdns.org/api';
+const BASE = 'http://127.0.0.1:8015/api';
+// const BASE = 'https://bogtar.duckdns.org/api';
 
 async function request(path, options = {}) {
   const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {})
@@ -11,6 +11,29 @@ async function request(path, options = {}) {
   }
 
   return res
+}
+
+/**
+ * Получение списка автомобилей по VIN
+ * @param {string} vin
+ */
+export async function getCarsByVin(vin) {
+  const res = await request(`/test/search/cars-by-vin?vin=${encodeURIComponent(vin)}`);
+  return await res.json();
+}
+
+/**
+ * Получение дерева запчастей по ID автомобиля
+ * @param {string} carId
+ */
+export async function getPartsByCarId(carId) {
+  const res = await request(`/test/search/parts-by-car-id/${encodeURIComponent(carId)}`);
+  return await res.json();
+}
+
+export async function getEntitiesByCode(code) {
+  const res = await request(`/test/search/entities-by-code/${encodeURIComponent(code)}`);
+  return await res.json();
 }
 
 // Функция для SSE потока поиска
