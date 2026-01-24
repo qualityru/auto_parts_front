@@ -1,23 +1,19 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   Box, Container, Typography, Stack, Grid, CssBaseline, Divider,
   List, ListItem, ListItemText, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Breadcrumbs, Link, Card,
   CardContent, Accordion, AccordionSummary, AccordionDetails,
-  Button
+  Button, Skeleton, Fade, CircularProgress
 } from '@mui/material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import SearchIcon from '@mui/icons-material/Search';
 
-// Swiper & Zoom
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation, Pagination } from 'swiper/modules';
 import Zoom from 'react-medium-image-zoom';
 import 'swiper/css';
-import 'swiper/css/navigation';
-import 'swiper/css/pagination';
 import 'react-medium-image-zoom/dist/styles.css';
 
 import Header from './components/Header';
@@ -33,6 +29,57 @@ const renderSafeText = (value) => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') return value.name || value.id || '---';
   return String(value);
+};
+
+// --- НОВЫЙ КОМПОНЕНТ ДЛЯ ПЛАВНОЙ ЗАГРУЗКИ С КРУТИЛКОЙ ---
+const SmartImage = ({ src }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setIsLoaded(false); // Сброс при смене картинки
+  }, [src]);
+
+  return (
+    <Box sx={{ 
+      position: 'relative', 
+      width: '100%', 
+      height: '100%', 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center',
+      minHeight: 300 // Чтобы контейнер не схлопывался
+    }}>
+      {/* Крутящийся статус-бар (Spinner) */}
+      {!isLoaded && (
+        <Box sx={{ 
+          position: 'absolute', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          gap: 2 
+        }}>
+          <CircularProgress size={40} thickness={4} sx={{ color: 'primary.main' }} />
+          <Typography variant="caption" color="text.secondary">Загрузка изображения...</Typography>
+        </Box>
+      )}
+
+      {/* Плавное появление картинки */}
+      <Fade in={isLoaded} timeout={1000}>
+        <img
+          src={src}
+          alt="схема"
+          onLoad={() => setIsLoaded(true)}
+          style={{ 
+            maxWidth: '100%', 
+            maxHeight: '60vh', 
+            objectFit: 'contain',
+            display: isLoaded ? 'block' : 'none',
+            borderRadius: '8px'
+          }}
+        />
+      </Fade>
+    </Box>
+  );
 };
 
 const structurePartsData = (partsList) => {
@@ -61,7 +108,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Состояния данных
   const [products, setProducts] = useState([]); 
   const [cars, setCars] = useState([]); 
   const [carParts, setCarParts] = useState(null); 
@@ -81,7 +127,6 @@ function App() {
     shape: { borderRadius: 12 }
   }), [themeMode]);
 
-  // Функция полного сброса в начало
   const resetToHome = () => {
     setCarParts(null);
     setSelectedCarInfo(null);
@@ -92,21 +137,17 @@ function App() {
     if (activeStream.current) activeStream.current.abort();
   };
 
-  // Поиск (VIN или Артикул)
   const handleUniversalSearch = async (query) => {
     const term = query?.trim() || searchQuery.trim();
     if (!term) return;
-
     if (activeStream.current) activeStream.current.abort();
     setIsLoading(true);
     setError(null);
     setSearchQuery(term);
-
     const isVin = /^[A-HJ-NPR-Z0-9]{17}$/i.test(term);
-
     if (isVin) {
       resetToHome();
-      setIsLoading(true); // Возвращаем loading после сброса
+      setIsLoading(true);
       try {
         const res = await getCarsByVin(term);
         const list = res.list || (Array.isArray(res) ? res : []);
@@ -114,10 +155,8 @@ function App() {
         if (list.length === 0) setError("Автомобиль не найден");
       } catch (err) { setError(err.message); } finally { setIsLoading(false); }
     } else {
-      // Поиск только запчастей (Артикул)
       setCars([]);
       setProducts([]);
-      // Если мы ищем артикул, мы "выходим" из каталога машины в общий поиск
       const stream = searchProductsStream(term, {
         onItem: (item) => {
           setProducts(prev => {
@@ -135,19 +174,29 @@ function App() {
   };
 
   const handleArticleSelect = async (part) => {
-    setActivePart(part);
+    setActivePart({ ...part, isImageLoading: true });
     try {
       const entities = await getEntitiesByCode(part.code);
-      const detail = entities?.list?.[0];
+      // Логика: берем сущность, где поле groups не пустое
+      const detail = entities?.list?.find(item => 
+        Array.isArray(item.groups) && item.groups.length > 0
+      ) || entities?.list?.[0];
+
       if (detail) {
         setActivePart(prev => ({
           ...prev,
           images: detail.images || [],
           brand: renderSafeText(detail.brand),
-          fullName: renderSafeText(detail.originalName) || part.name
+          fullName: renderSafeText(detail.originalName) || part.name,
+          isImageLoading: false
         }));
+      } else {
+        setActivePart(prev => ({ ...prev, isImageLoading: false }));
       }
-    } catch (err) { console.warn(err); }
+    } catch (err) { 
+      console.warn(err); 
+      setActivePart(prev => ({ ...prev, isImageLoading: false }));
+    }
   };
 
   const handleSelectCar = async (car) => {
@@ -165,14 +214,11 @@ function App() {
     } catch (err) { setError(err.message); } finally { setIsLoading(false); }
   };
 
-  // Переход к ценам с сохранением возможности вернуться
   const goToPrices = (code) => {
-    // Мы НЕ обнуляем selectedCarInfo, чтобы крошки остались
     setCarParts(null); 
     handleUniversalSearch(code);
   };
 
-  // Возврат из цен обратно в каталог машины
   const backToCatalog = async () => {
     if (selectedCarInfo) {
       setProducts([]);
@@ -195,24 +241,16 @@ function App() {
         />
 
         <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
-          
-          {/* Умные хлебные крошки */}
           {(selectedCarInfo || products.length > 0 || carParts) && (
             <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-              <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">
-                Главная
-              </Link>
-              
+              <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">Главная</Link>
               {selectedCarInfo && (
                 <Link component="button" variant="body2" onClick={backToCatalog} underline="hover" color={carParts ? "primary" : "inherit"} sx={{ fontWeight: carParts ? 700 : 400 }}>
                   {selectedCarInfo.brand} {selectedCarInfo.model}
                 </Link>
               )}
-
               {products.length > 0 && !carParts && (
-                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
-                  Цены: {searchQuery}
-                </Typography>
+                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>Цены: {searchQuery}</Typography>
               )}
             </Breadcrumbs>
           )}
@@ -223,7 +261,6 @@ function App() {
             <LoadingSpinner />
           ) : carParts ? (
             <Grid container spacing={2}>
-              {/* Лево: Дерево */}
               <Grid item xs={12} md={3}>
                 <Stack spacing={0.5} sx={{ maxHeight: '75vh', overflowY: 'auto' }}>
                   {Object.entries(carParts).map(([id, group]) => (
@@ -234,9 +271,7 @@ function App() {
                       <AccordionDetails sx={{ p: 0 }}>
                         <List dense disablePadding>
                           {Object.entries(group.subGroups).map(([sid, sub]) => (
-                            <ListItem 
-                              button 
-                              key={sid} 
+                            <ListItem button key={sid} 
                               onClick={() => {
                                 setSelectedSubGroup(sub);
                                 if (sub.parts?.length > 0) handleArticleSelect(sub.parts[0]);
@@ -254,29 +289,20 @@ function App() {
                 </Stack>
               </Grid>
 
-              {/* Центр: Схема */}
               <Grid item xs={12} md={6}>
                 <Paper variant="outlined" sx={{ p: 2, height: '75vh', display: 'flex', flexDirection: 'column', borderRadius: 4, bgcolor: '#fff' }}>
                   {activePart ? (
                     <>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                          {renderSafeText(activePart.code)} — {renderSafeText(activePart.name)}
-                        </Typography>
-                        <Button 
-                          size="small" 
-                          variant="contained" 
-                          startIcon={<SearchIcon />}
-                          onClick={() => goToPrices(activePart.code)}
-                          sx={{ borderRadius: 2 }}
-                        >
-                          Найти цены
-                        </Button>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{renderSafeText(activePart.code)} — {renderSafeText(activePart.name)}</Typography>
+                        <Button size="small" variant="contained" startIcon={<SearchIcon />} onClick={() => goToPrices(activePart.code)} sx={{ borderRadius: 2 }}>Найти цены</Button>
                       </Box>
                       <Divider sx={{ mb: 2 }} />
                       <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-                        {activePart.images?.length > 0 ? (
-                          <Zoom><img src={activePart.images[0]} alt="схема" style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }} /></Zoom>
+                        {activePart.isImageLoading ? (
+                          <CircularProgress />
+                        ) : activePart.images?.length > 0 ? (
+                          <Zoom><SmartImage src={activePart.images[0]} /></Zoom>
                         ) : (
                           <Stack alignItems="center" spacing={1} sx={{ opacity: 0.2 }}>
                             <PhotoCameraIcon sx={{ fontSize: 80 }} />
@@ -286,32 +312,19 @@ function App() {
                       </Box>
                     </>
                   ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                      <Typography color="text.secondary">Выберите узел для просмотра</Typography>
-                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Typography color="text.secondary">Выберите узел для просмотра</Typography></Box>
                   )}
                 </Paper>
               </Grid>
 
-              {/* Право: Таблица */}
               <Grid item xs={12} md={3}>
                 {selectedSubGroup && (
                   <TableContainer component={Paper} variant="outlined" sx={{ height: '75vh', borderRadius: 3 }}>
                     <Table stickyHeader size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>OEM / Название</TableCell>
-                        </TableRow>
-                      </TableHead>
+                      <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>OEM / Название</TableCell></TableRow></TableHead>
                       <TableBody>
                         {selectedSubGroup.parts.map((part) => (
-                          <TableRow 
-                            key={part.key} 
-                            hover 
-                            onClick={() => handleArticleSelect(part)} 
-                            selected={activePart?.code === part.code} 
-                            sx={{ cursor: 'pointer' }}
-                          >
+                          <TableRow key={part.key} hover onClick={() => handleArticleSelect(part)} selected={activePart?.code === part.code} sx={{ cursor: 'pointer' }}>
                             <TableCell>
                               <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem' }}>{renderSafeText(part.code)}</Typography>
                               <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>{renderSafeText(part.name)}</Typography>
@@ -327,29 +340,14 @@ function App() {
           ) : cars.length > 0 ? (
             <Grid container spacing={2}>
               {cars.map((car) => (
-                <Grid item xs={12} sm={4} key={car.id}>
-                  <Card variant="outlined" sx={{ cursor: 'pointer', borderRadius: 4, '&:hover': { borderColor: 'primary.main' } }} onClick={() => handleSelectCar(car)}>
-                    <CardContent>
-                      <Typography fontWeight={800} color="primary">{renderSafeText(car.brand)} {renderSafeText(car.model)}</Typography>
-                      <Typography variant="body2" color="text.secondary">{renderSafeText(car.year)} • {renderSafeText(car.engine_code)}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
+                <Grid item xs={12} sm={4} key={car.id}><Card variant="outlined" sx={{ cursor: 'pointer', borderRadius: 4, '&:hover': { borderColor: 'primary.main' } }} onClick={() => handleSelectCar(car)}><CardContent><Typography fontWeight={800} color="primary">{renderSafeText(car.brand)} {renderSafeText(car.model)}</Typography><Typography variant="body2" color="text.secondary">{renderSafeText(car.year)} • {renderSafeText(car.engine_code)}</Typography></CardContent></Card></Grid>
               ))}
             </Grid>
           ) : products.length > 0 ? (
             <Box>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Предложения для: {searchQuery}</Typography>
               <Grid container spacing={2}>
-                {products.map(p => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}>
-                    <ProductCard 
-                      product={p} 
-                      onAddToCart={() => {}} 
-                      isItemInCart={() => false} 
-                    />
-                  </Grid>
-                ))}
+                {products.map(p => (<Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}><ProductCard product={p} onAddToCart={() => {}} isItemInCart={() => false} /></Grid>))}
               </Grid>
             </Box>
           ) : (
