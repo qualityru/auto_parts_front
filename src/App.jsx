@@ -11,6 +11,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import SearchIcon from '@mui/icons-material/Search';
 
+// Swiper & Zoom
 import { Swiper, SwiperSlide } from 'swiper/react';
 import Zoom from 'react-medium-image-zoom';
 import 'swiper/css';
@@ -31,12 +32,12 @@ const renderSafeText = (value) => {
   return String(value);
 };
 
-// --- НОВЫЙ КОМПОНЕНТ ДЛЯ ПЛАВНОЙ ЗАГРУЗКИ С КРУТИЛКОЙ ---
+// --- ИСПРАВЛЕННЫЙ КОМПОНЕНТ С ЗУМОМ ВНУТРИ ---
 const SmartImage = ({ src }) => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    setIsLoaded(false); // Сброс при смене картинки
+    setIsLoaded(false);
   }, [src]);
 
   return (
@@ -47,36 +48,33 @@ const SmartImage = ({ src }) => {
       display: 'flex', 
       justifyContent: 'center', 
       alignItems: 'center',
-      minHeight: 300 // Чтобы контейнер не схлопывался
+      minHeight: 300 
     }}>
-      {/* Крутящийся статус-бар (Spinner) */}
       {!isLoaded && (
-        <Box sx={{ 
-          position: 'absolute', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          gap: 2 
-        }}>
-          <CircularProgress size={40} thickness={4} sx={{ color: 'primary.main' }} />
-          <Typography variant="caption" color="text.secondary">Загрузка изображения...</Typography>
+        <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <CircularProgress size={40} thickness={4} />
+          <Typography variant="caption" color="text.secondary">Загрузка...</Typography>
         </Box>
       )}
 
-      {/* Плавное появление картинки */}
-      <Fade in={isLoaded} timeout={1000}>
-        <img
-          src={src}
-          alt="схема"
-          onLoad={() => setIsLoaded(true)}
-          style={{ 
-            maxWidth: '100%', 
-            maxHeight: '60vh', 
-            objectFit: 'contain',
-            display: isLoaded ? 'block' : 'none',
-            borderRadius: '8px'
-          }}
-        />
+      <Fade in={isLoaded} timeout={800}>
+        <div style={{ width: '100%', height: '100%', display: isLoaded ? 'flex' : 'none', justifyContent: 'center' }}>
+          {/* Zoom теперь привязан напрямую к картинке */}
+          <Zoom>
+            <img
+              src={src}
+              alt="схема"
+              onLoad={() => setIsLoaded(true)}
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '60vh', 
+                objectFit: 'contain',
+                borderRadius: '8px',
+                cursor: 'zoom-in'
+              }}
+            />
+          </Zoom>
+        </div>
       </Fade>
     </Box>
   );
@@ -177,7 +175,6 @@ function App() {
     setActivePart({ ...part, isImageLoading: true });
     try {
       const entities = await getEntitiesByCode(part.code);
-      // Логика: берем сущность, где поле groups не пустое
       const detail = entities?.list?.find(item => 
         Array.isArray(item.groups) && item.groups.length > 0
       ) || entities?.list?.[0];
@@ -302,7 +299,7 @@ function App() {
                         {activePart.isImageLoading ? (
                           <CircularProgress />
                         ) : activePart.images?.length > 0 ? (
-                          <Zoom><SmartImage src={activePart.images[0]} /></Zoom>
+                          <SmartImage src={activePart.images[0]} />
                         ) : (
                           <Stack alignItems="center" spacing={1} sx={{ opacity: 0.2 }}>
                             <PhotoCameraIcon sx={{ fontSize: 80 }} />
