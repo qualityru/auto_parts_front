@@ -11,10 +11,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import SearchIcon from '@mui/icons-material/Search';
 
+// Метрика
+import { YMInitializer } from 'react-yandex-metrika';
+import ym from 'react-yandex-metrika';
+
 // Swiper & Zoom
-import { Swiper, SwiperSlide } from 'swiper/react';
 import Zoom from 'react-medium-image-zoom';
-import 'swiper/css';
 import 'react-medium-image-zoom/dist/styles.css';
 
 import Header from './components/Header';
@@ -32,7 +34,7 @@ const renderSafeText = (value) => {
   return String(value);
 };
 
-// --- ИСПРАВЛЕННЫЙ КОМПОНЕНТ С ЗУМОМ ВНУТРИ ---
+// --- КОМПОНЕНТ ДЛЯ ПЛАВНОЙ ЗАГРУЗКИ КАРТИНКИ СО СПИННЕРОМ И ЗУМОМ ---
 const SmartImage = ({ src }) => {
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -42,35 +44,26 @@ const SmartImage = ({ src }) => {
 
   return (
     <Box sx={{ 
-      position: 'relative', 
-      width: '100%', 
-      height: '100%', 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center',
-      minHeight: 300 
+      position: 'relative', width: '100%', height: '100%', 
+      display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 
     }}>
       {!isLoaded && (
         <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
           <CircularProgress size={40} thickness={4} />
-          <Typography variant="caption" color="text.secondary">Загрузка...</Typography>
+          <Typography variant="caption" color="text.secondary">Загрузка изображения...</Typography>
         </Box>
       )}
 
       <Fade in={isLoaded} timeout={800}>
         <div style={{ width: '100%', height: '100%', display: isLoaded ? 'flex' : 'none', justifyContent: 'center' }}>
-          {/* Zoom теперь привязан напрямую к картинке */}
           <Zoom>
             <img
               src={src}
               alt="схема"
               onLoad={() => setIsLoaded(true)}
               style={{ 
-                maxWidth: '100%', 
-                maxHeight: '60vh', 
-                objectFit: 'contain',
-                borderRadius: '8px',
-                cursor: 'zoom-in'
+                maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain',
+                borderRadius: '8px', cursor: 'zoom-in'
               }}
             />
           </Zoom>
@@ -133,16 +126,23 @@ function App() {
     setCars([]);
     setSearchQuery('');
     if (activeStream.current) activeStream.current.abort();
+    ym('hit', '/'); // Отправляем в метрику возврат на главную
   };
 
   const handleUniversalSearch = async (query) => {
     const term = query?.trim() || searchQuery.trim();
     if (!term) return;
+
     if (activeStream.current) activeStream.current.abort();
     setIsLoading(true);
     setError(null);
     setSearchQuery(term);
+
+    // Цель в метрику: Поиск
+    ym('reachGoal', 'SEARCH_INIT', { query: term });
+
     const isVin = /^[A-HJ-NPR-Z0-9]{17}$/i.test(term);
+
     if (isVin) {
       resetToHome();
       setIsLoading(true);
@@ -173,8 +173,14 @@ function App() {
 
   const handleArticleSelect = async (part) => {
     setActivePart({ ...part, isImageLoading: true });
+    
+    // Метрика: просмотр конкретного артикула
+    ym('hit', window.location.pathname + '#article=' + part.code);
+
     try {
       const entities = await getEntitiesByCode(part.code);
+      
+      // Логика: ищем сущность, где groups не пустой
       const detail = entities?.list?.find(item => 
         Array.isArray(item.groups) && item.groups.length > 0
       ) || entities?.list?.[0];
@@ -200,10 +206,8 @@ function App() {
     setIsLoading(true);
     setCars([]);
     setSelectedCarInfo({ 
-      id: car.id, 
-      brand: renderSafeText(car.brand), 
-      model: renderSafeText(car.model),
-      full: car 
+      id: car.id, brand: renderSafeText(car.brand), 
+      model: renderSafeText(car.model), full: car 
     });
     try {
       const data = await getPartsByCarId(car.id);
@@ -212,6 +216,7 @@ function App() {
   };
 
   const goToPrices = (code) => {
+    ym('reachGoal', 'GO_TO_PRICES', { article: code });
     setCarParts(null); 
     handleUniversalSearch(code);
   };
@@ -230,6 +235,14 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      
+      {/* Инициализация Яндекс Метрики 106429227 */}
+      <YMInitializer 
+        accounts={[106429227]} 
+        options={{ webvisor: true, clickmap: true, trackLinks: true, accurateTrackBounce: true, ecommerce: "dataLayer" }} 
+        version="2"
+      />
+
       <Box display="flex" flexDirection="column" minHeight="100vh">
         <Header 
           searchQuery={searchQuery} setSearchQuery={setSearchQuery}
@@ -239,7 +252,7 @@ function App() {
 
         <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
           {(selectedCarInfo || products.length > 0 || carParts) && (
-            <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+            <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2 }}>
               <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">Главная</Link>
               {selectedCarInfo && (
                 <Link component="button" variant="body2" onClick={backToCatalog} underline="hover" color={carParts ? "primary" : "inherit"} sx={{ fontWeight: carParts ? 700 : 400 }}>
@@ -258,6 +271,7 @@ function App() {
             <LoadingSpinner />
           ) : carParts ? (
             <Grid container spacing={2}>
+              {/* Лево: Группы */}
               <Grid item xs={12} md={3}>
                 <Stack spacing={0.5} sx={{ maxHeight: '75vh', overflowY: 'auto' }}>
                   {Object.entries(carParts).map(([id, group]) => (
@@ -286,6 +300,7 @@ function App() {
                 </Stack>
               </Grid>
 
+              {/* Центр: Схема */}
               <Grid item xs={12} md={6}>
                 <Paper variant="outlined" sx={{ p: 2, height: '75vh', display: 'flex', flexDirection: 'column', borderRadius: 4, bgcolor: '#fff' }}>
                   {activePart ? (
@@ -314,6 +329,7 @@ function App() {
                 </Paper>
               </Grid>
 
+              {/* Право: Таблица */}
               <Grid item xs={12} md={3}>
                 {selectedSubGroup && (
                   <TableContainer component={Paper} variant="outlined" sx={{ height: '75vh', borderRadius: 3 }}>
