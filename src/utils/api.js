@@ -31,6 +31,24 @@ export async function getPartsByCarId(carId) {
   return await res.json();
 }
 
+/**
+ * @param {string} number
+ */
+export async function getCarsByNumber(plate_number) {
+  const res = await request(`/test/search/cars-by-number?plate_number=${encodeURIComponent(plate_number)}`);
+  return await res.json();
+}
+
+/**
+ * @param {string} catalog
+ * @param {string} vehicle_id
+ * @param {string} ssd
+ */
+export async function getCarCatalog(catalog, vehicle_id, ssd) {
+  const res = await request(`/test/search/car-catalog?catalog=${encodeURIComponent(catalog)}&vehicle_id=${encodeURIComponent(vehicle_id)}&ssd=${encodeURIComponent(ssd)}`);
+  return await res.json();
+}
+
 export async function getEntitiesByCode(code) {
   const res = await request(`/test/search/entities-by-code/${encodeURIComponent(code)}`);
   return await res.json();
