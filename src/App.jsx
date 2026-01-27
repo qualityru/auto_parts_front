@@ -87,7 +87,6 @@ const structurePartsData = (partsList) => {
     if (!tree[l1Id]) tree[l1Id] = { name: renderSafeText(l1.name), subGroups: {} };
     if (!tree[l1Id].subGroups[l2Id]) tree[l1Id].subGroups[l2Id] = { name: renderSafeText(l2.name), parts: [] };
     
-    // Добавляем поле position для нумерации в обычном каталоге
     tree[l1Id].subGroups[l2Id].parts.push({
       ...part,
       code: renderSafeText(part.code),
@@ -203,9 +202,25 @@ function App() {
             setProducts(prev => {
               const groupKey = `${renderSafeText(item.brand)}-${renderSafeText(item.article)}`.toLowerCase().replace(/\s+/g, '');
               if (prev.find(p => p.groupKey === groupKey)) return prev;
-              return [...prev, { ...item, internalId: groupKey, groupKey, warehouses: item.warehouses || [], images: item.images || [] }];
+              return [...prev, { 
+                ...item, 
+                internalId: groupKey, 
+                groupKey, 
+                warehouses: item.warehouses || [], 
+                images: item.images || [] 
+              }];
             });
           },
+          // --- ВОТ ЭТО ИСПРАВЛЕНИЕ: ОБРАБОТКА КАРТИНОК ИЗ СТРИМА ---
+          onImages: (imageData) => {
+            setProducts(prev => prev.map(p => {
+              if (p.article === imageData.article) {
+                return { ...p, images: imageData.images };
+              }
+              return p;
+            }));
+          },
+          // -------------------------------------------------------
           onDone: () => setIsLoading(false),
           onError: (err) => { setError(err.message); setIsLoading(false); }
         });
@@ -303,7 +318,6 @@ function App() {
           {isLoading && products.length === 0 && cars.length === 0 ? (
             <LoadingSpinner />
           ) : laximoData ? (
-            /* --- КАТАЛОГ LAXIMO --- */
             <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto' }}>
               <Grid item xs={2} sx={{ minWidth: '220px', maxWidth: '280px', flexShrink: 0 }}>
                 <Stack spacing={0.5} sx={{ maxHeight: '78vh', overflowY: 'auto', pr: 1 }}>
@@ -355,7 +369,6 @@ function App() {
                             <TableRow key={idx} hover sx={{ cursor: 'pointer' }}>
                               <TableCell sx={{ py: 1 }}>
                                 <Stack direction="row" spacing={1} alignItems="center">
-                                  {/* ВОССТАНОВЛЕНО: Нумерация через codeonimage */}
                                   <Typography sx={{ fontWeight: 800, color: 'text.disabled', minWidth: 24, fontSize: '0.7rem' }}>
                                     {detail.codeonimage || idx + 1}
                                   </Typography>
@@ -378,7 +391,6 @@ function App() {
               </Grid>
             </Grid>
           ) : carParts ? (
-            /* --- ОБЫЧНЫЙ КАТАЛОГ --- */
             <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto' }}>
               <Grid item xs={2} sx={{ minWidth: '220px', maxWidth: '280px', flexShrink: 0 }}>
                 <Stack spacing={0.5} sx={{ maxHeight: '78vh', overflowY: 'auto', pr: 1 }}>
@@ -420,7 +432,6 @@ function App() {
                           <TableRow key={part.key} hover onClick={() => handleArticleSelect(part)} sx={{ cursor: 'pointer' }}>
                             <TableCell sx={{ py: 1 }}>
                                <Stack direction="row" spacing={1} alignItems="center">
-                                  {/* ВОССТАНОВЛЕНО: Нумерация для обычного каталога */}
                                   <Typography sx={{ fontWeight: 800, color: 'text.disabled', minWidth: 24, fontSize: '0.7rem' }}>
                                     {part.position}
                                   </Typography>
@@ -457,7 +468,17 @@ function App() {
             <Box>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Предложения: {searchQuery}</Typography>
               <Grid container spacing={2}>
-                {products.map(p => (<Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}><ProductCard product={p} onAddToCart={() => {}} isItemInCart={() => false} /></Grid>))}
+                {products.map(p => (
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}>
+                    {/* ОБЯЗАТЕЛЬНО ПЕРЕДАЕМ PRODUCT ОБЪЕКТ */}
+                    <ProductCard 
+                      product={p} 
+                      onAddToCart={() => {}} 
+                      isItemInCart={() => false} 
+                      onOpenImageModal={() => {}} 
+                    />
+                  </Grid>
+                ))}
               </Grid>
             </Box>
           ) : (

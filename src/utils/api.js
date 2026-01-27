@@ -1,5 +1,5 @@
-// const BASE = 'http://127.0.0.1:8015/api';
-const BASE = 'https://bogtar.duckdns.org/api';
+const BASE = 'http://127.0.0.1:8015/api';
+// const BASE = 'https://bogtar.duckdns.org/api';
 
 async function request(path, options = {}) {
   const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {})
