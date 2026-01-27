@@ -1,5 +1,5 @@
-// const BASE = 'http://127.0.0.1:8015/api';
-const BASE = 'https://bogtar.duckdns.org/api';
+const BASE = 'http://127.0.0.1:8015/api';
+// const BASE = 'https://bogtar.duckdns.org/api';
 
 async function request(path, options = {}) {
   const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {})
@@ -31,8 +31,13 @@ export async function getPartsByCarId(carId) {
   return await res.json();
 }
 
+export async function getEntitiesByCode(code) {
+  const res = await request(`/test/search/entities-by-code/${encodeURIComponent(code)}`);
+  return await res.json();
+}
+
 /**
- * @param {string} number
+ * @param {string} plate_number
  */
 export async function getCarsByNumber(plate_number) {
   const res = await request(`/test/search/cars-by-number?plate_number=${encodeURIComponent(plate_number)}`);
@@ -49,8 +54,8 @@ export async function getCarCatalog(catalog, vehicle_id, ssd) {
   return await res.json();
 }
 
-export async function getEntitiesByCode(code) {
-  const res = await request(`/test/search/entities-by-code/${encodeURIComponent(code)}`);
+export async function getUnitDetails(catalog, unit_id, ssd) {
+  const res = await request(`/test/search/car-unit-details?catalog=${encodeURIComponent(catalog)}&unit_id=${encodeURIComponent(unit_id)}&ssd=${encodeURIComponent(ssd)}`);
   return await res.json();
 }
 
