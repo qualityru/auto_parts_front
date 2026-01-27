@@ -158,7 +158,7 @@ function Header({
                   <SearchIcon />
                 </SearchIconWrapper>
                 <StyledInputBase
-                  placeholder="VIN или артикул детали..."
+                  placeholder="Введите госномер или VIN или артикул детали..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={handleKeyDown}

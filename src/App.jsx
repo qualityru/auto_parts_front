@@ -33,6 +33,7 @@ import {
   getUnitDetails 
 } from './utils/api';
 
+// Вспомогательная функция для рендера текста
 const renderSafeText = (value) => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') return value.name || value.id || '---';
@@ -74,6 +75,7 @@ const SmartImage = ({ src }) => {
   );
 };
 
+// Структурирование данных обычного каталога (по группам)
 const structurePartsData = (partsList) => {
   if (!Array.isArray(partsList)) return {};
   const tree = {};
@@ -84,11 +86,14 @@ const structurePartsData = (partsList) => {
     const l2Id = String(l2.id);
     if (!tree[l1Id]) tree[l1Id] = { name: renderSafeText(l1.name), subGroups: {} };
     if (!tree[l1Id].subGroups[l2Id]) tree[l1Id].subGroups[l2Id] = { name: renderSafeText(l2.name), parts: [] };
+    
+    // Добавляем поле position для нумерации в обычном каталоге
     tree[l1Id].subGroups[l2Id].parts.push({
       ...part,
       code: renderSafeText(part.code),
       name: renderSafeText(part.name),
-      key: `part-${index}-${part.code}`
+      key: `part-${index}-${part.code}`,
+      position: index + 1 
     });
   });
   return tree;
@@ -120,40 +125,29 @@ function App() {
     shape: { borderRadius: 12 }
   }), [themeMode]);
 
-  // --- ЛОГИКА ЗАГРУЗКИ ДЕТАЛЕЙ УЗЛА (LAXIMO) С КЭШИРОВАНИЕМ ---
   const loadUnitDetails = async (unit) => {
-    // Если детали уже загружены (есть в кэше), просто выходим
     if (unit.details && unit.details.length > 0) return;
-
     setIsDetailsLoading(true);
     try {
       const unitSsd = unit.ssd || laximoData.ssd;
       const data = await getUnitDetails(laximoData.catalog, unit.id, unitSsd);
       const details = data.details || [];
-
-      // Сохраняем детали в основное дерево laximoData (кэшируем)
       setLaximoData(prev => {
         if (!prev) return prev;
         const newCategories = prev.categories.map(cat => ({
           ...cat,
-          units: cat.units.map(u => 
-            u.id === unit.id ? { ...u, details: details } : u
-          )
+          units: cat.units.map(u => u.id === unit.id ? { ...u, details: details } : u)
         }));
         return { ...prev, categories: newCategories };
       });
-
-      // Обновляем текущий выбранный узел, чтобы таблица отобразила данные
       setSelectedSubGroup(prev => ({ ...prev, details: details }));
     } catch (err) {
-      console.error("Ошибка загрузки деталей узла", err);
       setError("Не удалось загрузить список деталей");
     } finally {
       setIsDetailsLoading(false);
     }
   };
 
-  // Эффект для автоматической подгрузки деталей Laximo при смене узла
   useEffect(() => {
     if (selectedSubGroup && laximoData?.catalog) {
       loadUnitDetails(selectedSubGroup);
@@ -177,10 +171,17 @@ function App() {
     const term = query?.trim() || searchQuery.trim();
     if (!term) return;
     if (activeStream.current) activeStream.current.abort();
+    
     setIsLoading(true);
     setError(null);
     setSearchQuery(term);
+    
+    setProducts([]);
+    setCars([]);
+    setCarParts(null);
     setLaximoData(null);
+    setSelectedCarInfo(null);
+
     ym('reachGoal', 'SEARCH_INIT', { query: term });
 
     const isVin = /^[A-HJ-NPR-Z0-9]{17}$/i.test(term);
@@ -188,17 +189,15 @@ function App() {
 
     try {
       if (isVin || isPlate) {
-        resetToHome();
-        setIsLoading(true);
-        setSearchQuery(term);
         const res = isVin ? await getCarsByVin(term) : await getCarsByNumber(term);
         const list = Array.isArray(res) ? res : (res.list || []);
+        
         setCars(list);
-        if (list.length === 0) setError("Автомобиль не найден");
+        if (list.length === 0) {
+            setError(isVin ? "Автомобиль по VIN не найден" : "Автомобиль по гос. номеру не найден");
+        }
         setIsLoading(false);
       } else {
-        setCars([]);
-        setProducts([]);
         const stream = searchProductsStream(term, {
           onItem: (item) => {
             setProducts(prev => {
@@ -221,13 +220,14 @@ function App() {
 
   const handleSelectCar = async (car) => {
     setIsLoading(true);
-    setCars([]);
+    setCars([]); 
     setSelectedCarInfo({ 
       id: car.vehicleid || car.id, 
       brand: renderSafeText(car.brand), 
       model: renderSafeText(car.name || car.model), 
       full: car 
     });
+
     try {
       if (car.catalog && car.ssd) {
         const data = await getCarCatalog(car.catalog, car.vehicleid || car.id, car.ssd);
@@ -236,11 +236,11 @@ function App() {
             setSelectedSubGroup(data.categories[0].units[0]);
         }
       } else {
-        const data = await getPartsByCarId(car.id);
+        const data = await getPartsByCarId(car.id || car.vehicleid);
         if (data?.list) setCarParts(structurePartsData(data.list));
       }
     } catch (err) { 
-      setError(err.message); 
+      setError("Не удалось загрузить данные каталога"); 
     } finally { 
       setIsLoading(false); 
     }
@@ -248,7 +248,6 @@ function App() {
 
   const goToPrices = (code) => {
     if (!code) return;
-    ym('reachGoal', 'GO_TO_PRICES', { article: code });
     setCarParts(null); 
     setLaximoData(null);
     handleUniversalSearch(code);
@@ -287,7 +286,8 @@ function App() {
           onToggleTheme={() => setThemeMode(t => t === 'light' ? 'dark' : 'light')}
         />
         <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
-          {(selectedCarInfo || products.length > 0 || carParts || laximoData) && (
+          
+          {(selectedCarInfo || products.length > 0 || carParts || laximoData || cars.length > 0) && (
             <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2 }}>
               <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">Главная</Link>
               {selectedCarInfo && (
@@ -300,7 +300,7 @@ function App() {
 
           {error && <ErrorMessage message={String(error)} onClose={() => setError(null)} />}
 
-          {isLoading && products.length === 0 ? (
+          {isLoading && products.length === 0 && cars.length === 0 ? (
             <LoadingSpinner />
           ) : laximoData ? (
             /* --- КАТАЛОГ LAXIMO --- */
@@ -329,52 +329,42 @@ function App() {
                   ))}
                 </Stack>
               </Grid>
-
               <Grid item xs={7} sx={{ minWidth: '500px', flexGrow: 1 }}>
                 <Paper variant="outlined" sx={{ p: 2, height: '78vh', display: 'flex', flexDirection: 'column', borderRadius: 4, bgcolor: '#fff' }}>
                   {selectedSubGroup ? (
                     <>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>
-                        {selectedSubGroup.name}
-                      </Typography>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1, fontSize: '0.85rem' }}>{selectedSubGroup.name}</Typography>
                       <Divider sx={{ mb: 1.5 }} />
-                      <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                        <SmartImage key={selectedSubGroup.id} src={selectedSubGroup.image} />
-                      </Box>
+                      <Box sx={{ flex: 1, overflow: 'hidden' }}><SmartImage key={selectedSubGroup.id} src={selectedSubGroup.image} /></Box>
                     </>
                   ) : <Typography align="center" sx={{ mt: 4 }}>Выберите узел</Typography>}
                 </Paper>
               </Grid>
-
               <Grid item xs={3} sx={{ minWidth: '280px', maxWidth: '350px', flexShrink: 0 }}>
                 {selectedSubGroup && (
                   <TableContainer component={Paper} variant="outlined" sx={{ height: '78vh', borderRadius: 3 }}>
                     {isDetailsLoading ? (
                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 10, gap: 2 }}>
-                        <CircularProgress size={30} />
-                        <Typography variant="caption">Загружаем список...</Typography>
+                        <CircularProgress size={30} /><Typography variant="caption">Загрузка деталей...</Typography>
                       </Box>
                     ) : (
                       <Table stickyHeader size="small">
-                        <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem', py: 1.5 }}>OEM / Поиск цен</TableCell></TableRow></TableHead>
+                        <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>№ / Деталь</TableCell></TableRow></TableHead>
                         <TableBody>
                           {selectedSubGroup.details?.map((detail, idx) => (
                             <TableRow key={idx} hover sx={{ cursor: 'pointer' }}>
                               <TableCell sx={{ py: 1 }}>
-                                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                                  <Stack direction="row" spacing={1} alignItems="flex-start">
-                                      <Typography sx={{ minWidth: 18, fontWeight: 800, color: 'text.disabled', fontSize: '0.65rem' }}>{detail.codeonimage}</Typography>
-                                      <Box>
-                                          <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem', lineHeight: 1 }}>{detail.oem || '---'}</Typography>
-                                          <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary', mt: 0.3, lineHeight: 1.1 }}>{detail.name}</Typography>
-                                      </Box>
-                                  </Stack>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  {/* ВОССТАНОВЛЕНО: Нумерация через codeonimage */}
+                                  <Typography sx={{ fontWeight: 800, color: 'text.disabled', minWidth: 24, fontSize: '0.7rem' }}>
+                                    {detail.codeonimage || idx + 1}
+                                  </Typography>
+                                  <Box sx={{ flex: 1 }}>
+                                      <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem' }}>{detail.oem || '---'}</Typography>
+                                      <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>{detail.name}</Typography>
+                                  </Box>
                                   {detail.oem && (
-                                      <Tooltip title="Найти цены">
-                                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); goToPrices(detail.oem); }} color="primary" sx={{ bgcolor: 'action.hover' }}>
-                                              <SearchIcon fontSize="small" />
-                                          </IconButton>
-                                      </Tooltip>
+                                      <IconButton size="small" onClick={() => goToPrices(detail.oem)} color="primary"><SearchIcon fontSize="small" /></IconButton>
                                   )}
                                 </Stack>
                               </TableCell>
@@ -388,29 +378,18 @@ function App() {
               </Grid>
             </Grid>
           ) : carParts ? (
-            /* --- ОБЫЧНЫЙ КАТАЛОГ (По ГОС номеру) --- */
+            /* --- ОБЫЧНЫЙ КАТАЛОГ --- */
             <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto' }}>
               <Grid item xs={2} sx={{ minWidth: '220px', maxWidth: '280px', flexShrink: 0 }}>
                 <Stack spacing={0.5} sx={{ maxHeight: '78vh', overflowY: 'auto', pr: 1 }}>
                   {Object.entries(carParts).map(([id, group]) => (
-                    <Accordion key={id} disableGutters elevation={0} sx={{ bgcolor: 'transparent', borderBottom: '1px solid #eee' }}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: '1rem' }} />}>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.75rem', lineHeight: 1.2 }}>{renderSafeText(group.name)}</Typography>
-                      </AccordionSummary>
+                    <Accordion key={id} disableGutters sx={{ bgcolor: 'transparent' }}>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{group.name}</Typography></AccordionSummary>
                       <AccordionDetails sx={{ p: 0 }}>
-                        <List dense disablePadding>
+                        <List dense>
                           {Object.entries(group.subGroups).map(([sid, sub]) => (
-                            <ListItem 
-                                button 
-                                key={sid} 
-                                onClick={() => { 
-                                    setSelectedSubGroup(sub); 
-                                    if (sub.parts?.length > 0) handleArticleSelect(sub.parts[0]); 
-                                }} 
-                                selected={selectedSubGroup?.name === sub.name} 
-                                sx={{ py: 0.4, pl: 2 }}
-                            >
-                              <ListItemText primary={renderSafeText(sub.name)} primaryTypographyProps={{ fontSize: '0.7rem', lineHeight: 1.1 }} />
+                            <ListItem button key={sid} onClick={() => setSelectedSubGroup(sub)} selected={selectedSubGroup?.name === sub.name}>
+                              <ListItemText primary={sub.name} primaryTypographyProps={{ fontSize: '0.7rem' }} />
                             </ListItem>
                           ))}
                         </List>
@@ -419,61 +398,37 @@ function App() {
                   ))}
                 </Stack>
               </Grid>
-
-              <Grid item xs={7} sx={{ minWidth: '500px', flexGrow: 1 }}>
-                <Paper variant="outlined" sx={{ p: 2, height: '78vh', display: 'flex', flexDirection: 'column', borderRadius: 4, bgcolor: '#fff' }}>
-                  {activePart ? (
-                    <>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>
-                          {activePart.code} — {activePart.name}
-                        </Typography>
-                        <Button size="small" variant="contained" startIcon={<SearchIcon />} onClick={() => goToPrices(activePart.code)}>Цены</Button>
+              <Grid item xs={7} sx={{ flexGrow: 1 }}>
+                 <Paper variant="outlined" sx={{ p: 2, height: '78vh', borderRadius: 4 }}>
+                    {activePart ? (
+                      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{activePart.code} — {activePart.name}</Typography>
+                        <Divider sx={{ my: 1 }} />
+                        <Box sx={{ flex: 1 }}><SmartImage src={activePart.images?.[0]} /></Box>
+                        <Button variant="contained" onClick={() => goToPrices(activePart.code)} sx={{ mt: 1 }}>Найти цены</Button>
                       </Box>
-                      <Divider sx={{ mb: 1.5 }} />
-                      <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-                        {activePart.isImageLoading ? (
-                            <CircularProgress />
-                        ) : activePart.images?.length > 0 ? (
-                            <SmartImage key={activePart.images[0]} src={activePart.images[0]} />
-                        ) : (
-                            <Stack alignItems="center" spacing={1} sx={{ opacity: 0.3 }}>
-                                <PhotoCameraIcon sx={{ fontSize: 80 }} />
-                                <Typography variant="caption">Нет изображения</Typography>
-                            </Stack>
-                        )}
-                      </Box>
-                    </>
-                  ) : <Typography align="center" sx={{ mt: 4 }}>Выберите узел и деталь</Typography>}
-                </Paper>
+                    ) : <Typography align="center" sx={{ mt: 4 }}>Выберите деталь</Typography>}
+                 </Paper>
               </Grid>
-
-              <Grid item xs={3} sx={{ minWidth: '280px', maxWidth: '350px', flexShrink: 0 }}>
+              <Grid item xs={3} sx={{ minWidth: '280px' }}>
                 {selectedSubGroup && (
-                  <TableContainer component={Paper} variant="outlined" sx={{ height: '78vh', borderRadius: 3 }}>
-                    <Table stickyHeader size="small">
-                      <TableHead><TableRow><TableCell sx={{ fontSize: '0.7rem', py: 1.5 }}>Деталь / Поиск цен</TableCell></TableRow></TableHead>
+                  <TableContainer component={Paper} variant="outlined" sx={{ height: '78vh' }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>№ / Деталь</TableCell></TableRow></TableHead>
                       <TableBody>
                         {selectedSubGroup.parts?.map((part) => (
-                          <TableRow 
-                            key={part.key} 
-                            hover 
-                            onClick={() => handleArticleSelect(part)} 
-                            selected={activePart?.code === part.code} 
-                            sx={{ cursor: 'pointer' }}
-                          >
+                          <TableRow key={part.key} hover onClick={() => handleArticleSelect(part)} sx={{ cursor: 'pointer' }}>
                             <TableCell sx={{ py: 1 }}>
-                                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                                    <Box sx={{ flex: 1 }}>
-                                        <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem' }}>{part.code || 'Арт. отсутствует'}</Typography>
-                                        <Typography sx={{ fontSize: '0.65rem', mt: 0.3 }}>{part.name}</Typography>
-                                    </Box>
-                                    <Tooltip title="Найти цены">
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); goToPrices(part.code); }} color="primary" sx={{ bgcolor: 'action.hover' }}>
-                                            <SearchIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                </Stack>
+                               <Stack direction="row" spacing={1} alignItems="center">
+                                  {/* ВОССТАНОВЛЕНО: Нумерация для обычного каталога */}
+                                  <Typography sx={{ fontWeight: 800, color: 'text.disabled', minWidth: 24, fontSize: '0.7rem' }}>
+                                    {part.position}
+                                  </Typography>
+                                  <Box>
+                                    <Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{part.code}</Typography>
+                                    <Typography sx={{ fontSize: '0.65rem' }}>{part.name}</Typography>
+                                  </Box>
+                               </Stack>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -484,24 +439,21 @@ function App() {
               </Grid>
             </Grid>
           ) : cars.length > 0 ? (
-            /* --- СПИСОК МАШИН --- */
             <Grid container spacing={2}>
               {cars.map((car) => (
                 <Grid item xs={12} sm={4} key={car.id || car.vehicleid}>
-                  <Card variant="outlined" sx={{ cursor: 'pointer', borderRadius: 4, '&:hover': { borderColor: 'primary.main' } }} onClick={() => handleSelectCar(car)}>
+                  <Card variant="outlined" sx={{ cursor: 'pointer', borderRadius: 4, '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }} onClick={() => handleSelectCar(car)}>
                     <CardContent>
-                      <Typography fontWeight={800} color="primary">{renderSafeText(car.brand)} {renderSafeText(car.name || car.model)}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {renderSafeText(car.manufactured || car.year)} • {renderSafeText(car.engine || car.engine_code)}
-                      </Typography>
-                      {car.market && <Typography variant="caption" display="block">{car.market}</Typography>}
+                      <Typography fontWeight={800} color="primary" variant="h6">{renderSafeText(car.brand)} {renderSafeText(car.name || car.model)}</Typography>
+                      <Typography variant="body2" color="text.secondary">Год: {renderSafeText(car.manufactured || car.year)}</Typography>
+                      <Typography variant="body2" color="text.secondary">Двиг: {renderSafeText(car.engine || car.engine_code)}</Typography>
+                      {car.vin && <Typography variant="caption" sx={{ color: 'text.disabled' }}>VIN: {car.vin}</Typography>}
                     </CardContent>
                   </Card>
                 </Grid>
               ))}
             </Grid>
           ) : products.length > 0 ? (
-            /* --- РЕЗУЛЬТАТЫ ПОИСКА ТОВАРОВ --- */
             <Box>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Предложения: {searchQuery}</Typography>
               <Grid container spacing={2}>
