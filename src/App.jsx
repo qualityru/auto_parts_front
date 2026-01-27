@@ -30,7 +30,7 @@ import {
   getEntitiesByCode, 
   getCarsByNumber, 
   getCarCatalog,
-  getUnitDetails // Новая ручка
+  getUnitDetails 
 } from './utils/api';
 
 const renderSafeText = (value) => {
@@ -98,6 +98,7 @@ function App() {
   const [themeMode, setThemeMode] = useState('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [error, setError] = useState(null);
   
   const [products, setProducts] = useState([]); 
@@ -119,21 +120,45 @@ function App() {
     shape: { borderRadius: 12 }
   }), [themeMode]);
 
+  // --- ЛОГИКА ЗАГРУЗКИ ДЕТАЛЕЙ УЗЛА (LAXIMO) С КЭШИРОВАНИЕМ ---
+  const loadUnitDetails = async (unit) => {
+    // Если детали уже загружены (есть в кэше), просто выходим
+    if (unit.details && unit.details.length > 0) return;
+
+    setIsDetailsLoading(true);
+    try {
+      const unitSsd = unit.ssd || laximoData.ssd;
+      const data = await getUnitDetails(laximoData.catalog, unit.id, unitSsd);
+      const details = data.details || [];
+
+      // Сохраняем детали в основное дерево laximoData (кэшируем)
+      setLaximoData(prev => {
+        if (!prev) return prev;
+        const newCategories = prev.categories.map(cat => ({
+          ...cat,
+          units: cat.units.map(u => 
+            u.id === unit.id ? { ...u, details: details } : u
+          )
+        }));
+        return { ...prev, categories: newCategories };
+      });
+
+      // Обновляем текущий выбранный узел, чтобы таблица отобразила данные
+      setSelectedSubGroup(prev => ({ ...prev, details: details }));
+    } catch (err) {
+      console.error("Ошибка загрузки деталей узла", err);
+      setError("Не удалось загрузить список деталей");
+    } finally {
+      setIsDetailsLoading(false);
+    }
+  };
+
   // Эффект для автоматической подгрузки деталей Laximo при смене узла
   useEffect(() => {
     if (selectedSubGroup && laximoData?.catalog) {
       loadUnitDetails(selectedSubGroup);
     }
   }, [selectedSubGroup?.id]);
-
-  const loadUnitDetails = async (unit) => {
-    try {
-      const data = await getUnitDetails(laximoData.catalog, unit.id, unit.ssd || laximoData.ssd);
-      setSelectedSubGroup(prev => ({ ...prev, details: data.details || [] }));
-    } catch (err) {
-      console.error("Ошибка загрузки деталей узла", err);
-    }
-  };
 
   const resetToHome = () => {
     setCarParts(null);
@@ -324,33 +349,40 @@ function App() {
               <Grid item xs={3} sx={{ minWidth: '280px', maxWidth: '350px', flexShrink: 0 }}>
                 {selectedSubGroup && (
                   <TableContainer component={Paper} variant="outlined" sx={{ height: '78vh', borderRadius: 3 }}>
-                    <Table stickyHeader size="small">
-                      <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem', py: 1.5 }}>OEM / Поиск цен</TableCell></TableRow></TableHead>
-                      <TableBody>
-                        {selectedSubGroup.details?.map((detail, idx) => (
-                          <TableRow key={idx} hover sx={{ cursor: 'pointer' }}>
-                            <TableCell sx={{ py: 1 }}>
-                              <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                                <Stack direction="row" spacing={1} alignItems="flex-start">
-                                    <Typography sx={{ minWidth: 18, fontWeight: 800, color: 'text.disabled', fontSize: '0.65rem' }}>{detail.codeonimage}</Typography>
-                                    <Box>
-                                        <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem', lineHeight: 1 }}>{detail.oem || '---'}</Typography>
-                                        <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary', mt: 0.3, lineHeight: 1.1 }}>{detail.name}</Typography>
-                                    </Box>
+                    {isDetailsLoading ? (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 10, gap: 2 }}>
+                        <CircularProgress size={30} />
+                        <Typography variant="caption">Загружаем список...</Typography>
+                      </Box>
+                    ) : (
+                      <Table stickyHeader size="small">
+                        <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem', py: 1.5 }}>OEM / Поиск цен</TableCell></TableRow></TableHead>
+                        <TableBody>
+                          {selectedSubGroup.details?.map((detail, idx) => (
+                            <TableRow key={idx} hover sx={{ cursor: 'pointer' }}>
+                              <TableCell sx={{ py: 1 }}>
+                                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                                      <Typography sx={{ minWidth: 18, fontWeight: 800, color: 'text.disabled', fontSize: '0.65rem' }}>{detail.codeonimage}</Typography>
+                                      <Box>
+                                          <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem', lineHeight: 1 }}>{detail.oem || '---'}</Typography>
+                                          <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary', mt: 0.3, lineHeight: 1.1 }}>{detail.name}</Typography>
+                                      </Box>
+                                  </Stack>
+                                  {detail.oem && (
+                                      <Tooltip title="Найти цены">
+                                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); goToPrices(detail.oem); }} color="primary" sx={{ bgcolor: 'action.hover' }}>
+                                              <SearchIcon fontSize="small" />
+                                          </IconButton>
+                                      </Tooltip>
+                                  )}
                                 </Stack>
-                                {detail.oem && (
-                                    <Tooltip title="Найти цены">
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); goToPrices(detail.oem); }} color="primary" sx={{ bgcolor: 'action.hover' }}>
-                                            <SearchIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
-                              </Stack>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
                   </TableContainer>
                 )}
               </Grid>
