@@ -13,6 +13,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import { YMInitializer } from 'react-yandex-metrika';
 import ym from 'react-yandex-metrika';
 import Zoom from 'react-medium-image-zoom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import 'react-medium-image-zoom/dist/styles.css';
 
 import Header from './components/Header';
@@ -98,9 +99,13 @@ const structurePartsData = (partsList) => {
   return tree;
 };
 
-function App() {
+function App({ searchType }) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
   const [themeMode, setThemeMode] = useState('light');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchCategory, setSearchCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -113,6 +118,27 @@ function App() {
   const [selectedCarInfo, setSelectedCarInfo] = useState(null);
   const [activePart, setActivePart] = useState(null);
   const activeStream = useRef(null);
+
+  // Инициализация поиска из URL параметров (поддерживаем старые и новые имена параметров)
+  useEffect(() => {
+    const vinParam = searchParams.get('search_vin') || searchParams.get('vin');
+    const plateParam = searchParams.get('search_plate_number') || searchParams.get('number');
+    const articleParam = searchParams.get('search_article') || searchParams.get('article');
+
+    if (vinParam) {
+      setSearchQuery(vinParam);
+      setSearchCategory('vin');
+      handleUniversalSearch(vinParam);
+    } else if (plateParam) {
+      setSearchQuery(plateParam);
+      setSearchCategory('plate_number');
+      handleUniversalSearch(plateParam);
+    } else if (articleParam) {
+      setSearchQuery(articleParam);
+      setSearchCategory('article');
+      handleUniversalSearch(articleParam);
+    }
+  }, [searchParams]);
 
   const theme = useMemo(() => createTheme({
     palette: { 
@@ -162,6 +188,8 @@ function App() {
     setProducts([]);
     setCars([]);
     setSearchQuery('');
+    setSearchCategory(null);
+    navigate('/');
     if (activeStream.current) activeStream.current.abort();
     ym('hit', '/');
   };
@@ -187,16 +215,29 @@ function App() {
     const isPlate = /^[A-ZА-Я]{1}\d{3}[A-ZА-Я]{2}\d{2,3}$/i.test(term.replace(/\s+/g, ''));
 
     try {
-      if (isVin || isPlate) {
-        const res = isVin ? await getCarsByVin(term) : await getCarsByNumber(term);
+      if (isVin) {
+        setSearchCategory('vin');
+        navigate(`/search?vin=${encodeURIComponent(term)}`);
+        const res = await getCarsByVin(term);
         const list = Array.isArray(res) ? res : (res.list || []);
-        
         setCars(list);
         if (list.length === 0) {
-            setError(isVin ? "Автомобиль по VIN не найден" : "Автомобиль по гос. номеру не найден");
+          setError("Автомобиль по VIN не найден");
+        }
+        setIsLoading(false);
+      } else if (isPlate) {
+        setSearchCategory('plate_number');
+        navigate(`/search?number=${encodeURIComponent(term)}`);
+        const res = await getCarsByNumber(term);
+        const list = Array.isArray(res) ? res : (res.list || []);
+        setCars(list);
+        if (list.length === 0) {
+          setError("Автомобиль по гос. номеру не найден");
         }
         setIsLoading(false);
       } else {
+        setSearchCategory('article');
+        navigate(`/search?article=${encodeURIComponent(term)}`);
         const stream = searchProductsStream(term, {
           onItem: (item) => {
             setProducts(prev => {
@@ -211,7 +252,6 @@ function App() {
               }];
             });
           },
-          // --- ВОТ ЭТО ИСПРАВЛЕНИЕ: ОБРАБОТКА КАРТИНОК ИЗ СТРИМА ---
           onImages: (imageData) => {
             setProducts(prev => prev.map(p => {
               if (p.article === imageData.article) {
@@ -220,7 +260,6 @@ function App() {
               return p;
             }));
           },
-          // -------------------------------------------------------
           onDone: () => setIsLoading(false),
           onError: (err) => { setError(err.message); setIsLoading(false); }
         });
@@ -304,10 +343,37 @@ function App() {
           
           {(selectedCarInfo || products.length > 0 || carParts || laximoData || cars.length > 0) && (
             <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2 }}>
-              <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">Главная</Link>
-              {selectedCarInfo && (
+              <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">
+                Главная
+              </Link>
+              
+              {searchCategory === 'vin' && (
+                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
+                  Поиск по VIN: {searchQuery}
+                </Typography>
+              )}
+              
+              {searchCategory === 'plate_number' && (
+                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
+                  Поиск по гос. номеру: {searchQuery}
+                </Typography>
+              )}
+              
+              {searchCategory === 'article' && (
+                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
+                  Поиск по артикулу: {searchQuery}
+                </Typography>
+              )}
+              
+              {selectedCarInfo && !searchCategory && (
                 <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
                   {selectedCarInfo.brand} {selectedCarInfo.model}
+                </Typography>
+              )}
+              
+              {selectedSubGroup && laximoData && (
+                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
+                  {selectedSubGroup.name}
                 </Typography>
               )}
             </Breadcrumbs>
@@ -470,7 +536,6 @@ function App() {
               <Grid container spacing={2}>
                 {products.map(p => (
                   <Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}>
-                    {/* ОБЯЗАТЕЛЬНО ПЕРЕДАЕМ PRODUCT ОБЪЕКТ */}
                     <ProductCard 
                       product={p} 
                       onAddToCart={() => {}} 

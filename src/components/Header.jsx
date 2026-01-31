@@ -26,8 +26,9 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useNavigate } from 'react-router-dom';
 
-// Импорт корзины
+// Импорт корзины и модалки аккаунта
 import CartDrawer from './CartModal';
+import AccountModal from './AccountModal';
 
 // Ультрасовременный контейнер поиска с эффектом фокусировки
 const Search = styled('div')(({ theme }) => ({
@@ -78,7 +79,6 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 }));
 
 function Header({ 
-  onAccountClick, 
   searchQuery, 
   setSearchQuery, 
   onSearch,
@@ -94,11 +94,23 @@ function Header({
   const theme = useTheme();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   // Проверка авторизации
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     setIsLoggedIn(!!token);
+  }, []);
+
+  // Слушаем изменения авторизации (для обновления при логине)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('authToken');
+      setIsLoggedIn(!!token);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const trigger = useScrollTrigger({ disableHysteresis: true, threshold: 20 });
@@ -111,6 +123,15 @@ function Header({
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') handleSearch();
+  };
+
+  const handleAccountModalClose = () => {
+    setIsAccountModalOpen(false);
+    // После логина обновляем статус
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      setIsLoggedIn(true);
+    }
   };
 
   return (
@@ -146,8 +167,15 @@ function Header({
               }}>
                 <DirectionsCarFilledIcon sx={{ fontSize: 28, color: '#fff' }} />
               </Box>
-              <Typography variant="h5" sx={{ fontWeight: 900, letterSpacing: '-1px', display: { xs: 'none', md: 'block' } }}>
-                BogTar<Box component="span" sx={{ color: '#90caf9' }}>:)</Box>
+              <Typography
+                variant="h5"
+                sx={{ fontWeight: 900, letterSpacing: '-1px', display: { xs: 'none', md: 'block' }, cursor: 'pointer' }}
+                onClick={() => { navigate('/'); setSearchQuery(''); }}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { navigate('/'); setSearchQuery(''); } }}
+              >
+                BOGTAR
               </Typography>
             </Stack>
 
@@ -216,7 +244,7 @@ function Header({
                 <>
                   <Button
                     variant="contained"
-                    onClick={onAccountClick}
+                    onClick={() => setIsAccountModalOpen(true)}
                     startIcon={<AccountCircleIcon />}
                     sx={{
                       display: { xs: 'none', md: 'flex' },
@@ -237,7 +265,7 @@ function Header({
                   </Button>
                   <IconButton 
                     sx={{ display: { xs: 'flex', md: 'none' }, color: 'white' }} 
-                    onClick={onAccountClick}
+                    onClick={() => setIsAccountModalOpen(true)}
                   >
                     <AccountCircleIcon />
                   </IconButton>
@@ -257,6 +285,12 @@ function Header({
         onClearCart={onClearCart}
         getCartTotal={getCartTotal}
       />
+
+      {isAccountModalOpen && (
+        <AccountModal
+          onClose={handleAccountModalClose}
+        />
+      )}
     </>
   );
 }

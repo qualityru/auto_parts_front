@@ -10,8 +10,8 @@ root.render(
     <Router>
       <Routes>
         <Route path="/" element={<App />} />
-        <Route path="/profile" element={<UserProfile />} 
-        />
+        <Route path="/search" element={<App />} />
+        <Route path="/profile" element={<UserProfile />} />
       </Routes>
     </Router>
   </React.StrictMode>
