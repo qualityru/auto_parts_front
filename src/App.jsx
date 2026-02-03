@@ -107,6 +107,7 @@ function App({ searchType }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchCategory, setSearchCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isArticleSearching, setIsArticleSearching] = useState(false);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -118,6 +119,32 @@ function App({ searchType }) {
   const [selectedCarInfo, setSelectedCarInfo] = useState(null);
   const [activePart, setActivePart] = useState(null);
   const activeStream = useRef(null);
+  const hasFirstArticleItem = useRef(false);
+  const loadingStartRef = useRef(0);
+  const loadingTimerRef = useRef(null);
+  const MIN_SPINNER_MS = 900;
+
+  const startLoadingTimer = () => {
+    loadingStartRef.current = Date.now();
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+  };
+
+  const stopWithMinDelay = (setter) => {
+    const elapsed = Date.now() - loadingStartRef.current;
+    const delay = Math.max(0, MIN_SPINNER_MS - elapsed);
+    if (delay === 0) {
+      setter(false);
+      return;
+    }
+    if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    loadingTimerRef.current = setTimeout(() => {
+      setter(false);
+      loadingTimerRef.current = null;
+    }, delay);
+  };
 
   // Инициализация поиска из URL параметров (поддерживаем старые и новые имена параметров)
   useEffect(() => {
@@ -200,6 +227,7 @@ function App({ searchType }) {
     if (activeStream.current) activeStream.current.abort();
     
     setIsLoading(true);
+    startLoadingTimer();
     setError(null);
     setSearchQuery(term);
     
@@ -216,6 +244,7 @@ function App({ searchType }) {
 
     try {
       if (isVin) {
+        setIsArticleSearching(false);
         setSearchCategory('vin');
         navigate(`/search?vin=${encodeURIComponent(term)}`);
         const res = await getCarsByVin(term);
@@ -224,8 +253,9 @@ function App({ searchType }) {
         if (list.length === 0) {
           setError("Автомобиль по VIN не найден");
         }
-        setIsLoading(false);
+        stopWithMinDelay(setIsLoading);
       } else if (isPlate) {
+        setIsArticleSearching(false);
         setSearchCategory('plate_number');
         navigate(`/search?number=${encodeURIComponent(term)}`);
         const res = await getCarsByNumber(term);
@@ -234,12 +264,18 @@ function App({ searchType }) {
         if (list.length === 0) {
           setError("Автомобиль по гос. номеру не найден");
         }
-        setIsLoading(false);
+        stopWithMinDelay(setIsLoading);
       } else {
         setSearchCategory('article');
         navigate(`/search?article=${encodeURIComponent(term)}`);
+        hasFirstArticleItem.current = false;
+        setIsArticleSearching(true);
         const stream = searchProductsStream(term, {
           onItem: (item) => {
+            if (!hasFirstArticleItem.current) {
+              hasFirstArticleItem.current = true;
+              stopWithMinDelay(setIsArticleSearching);
+            }
             setProducts(prev => {
               const groupKey = `${renderSafeText(item.brand)}-${renderSafeText(item.article)}`.toLowerCase().replace(/\s+/g, '');
               if (prev.find(p => p.groupKey === groupKey)) return prev;
@@ -260,15 +296,25 @@ function App({ searchType }) {
               return p;
             }));
           },
-          onDone: () => setIsLoading(false),
-          onError: (err) => { setError(err.message); setIsLoading(false); }
+          onDone: () => {
+            stopWithMinDelay(setIsLoading);
+            if (!hasFirstArticleItem.current) {
+              stopWithMinDelay(setIsArticleSearching);
+            }
+          },
+          onError: (err) => {
+            setError(err.message);
+            stopWithMinDelay(setIsLoading);
+            stopWithMinDelay(setIsArticleSearching);
+          }
         });
         activeStream.current = stream;
         await stream.start();
       }
     } catch (err) {
       setError(err.message);
-      setIsLoading(false);
+      stopWithMinDelay(setIsLoading);
+      stopWithMinDelay(setIsArticleSearching);
     }
   };
 
@@ -381,7 +427,7 @@ function App({ searchType }) {
 
           {error && <ErrorMessage message={String(error)} onClose={() => setError(null)} />}
 
-          {isLoading && products.length === 0 && cars.length === 0 ? (
+          {(isLoading && products.length === 0 && cars.length === 0) || (isArticleSearching && products.length === 0) ? (
             <LoadingSpinner />
           ) : laximoData ? (
             <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto' }}>
