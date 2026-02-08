@@ -139,11 +139,15 @@ const LaximoCatalogView = ({
                         {detail.oem && (
                           <IconButton
                             size="small"
+                            component="a"
+                            href={`/search?article=${encodeURIComponent(detail.oem)}`}
+                            color="primary"
                             onClick={(event) => {
+                              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                              event.preventDefault();
                               event.stopPropagation();
                               goToPrices(detail.oem);
                             }}
-                            color="primary"
                           >
                             <SearchIcon fontSize="small" />
                           </IconButton>

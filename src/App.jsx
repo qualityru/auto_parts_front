@@ -3,7 +3,7 @@ import { Box, Container, CssBaseline } from '@mui/material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { YMInitializer } from 'react-yandex-metrika';
 import ym from 'react-yandex-metrika';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -59,6 +59,7 @@ const structurePartsData = (partsList) => {
 
 function App({ searchType }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   
   const [themeMode, setThemeMode] = useState('light');
@@ -82,6 +83,7 @@ function App({ searchType }) {
   const hasFirstArticleItem = useRef(false);
   const loadingStartRef = useRef(0);
   const loadingTimerRef = useRef(null);
+  const isRestoringRef = useRef(false);
   const MIN_SPINNER_MS = 900;
 
   const startLoadingTimer = () => {
@@ -106,11 +108,69 @@ function App({ searchType }) {
     }, delay);
   };
 
+  const findUnitById = (data, unitId) => {
+    if (!data?.categories?.length || !unitId) return null;
+    for (const cat of data.categories) {
+      const unit = cat.units?.find((item) => String(item.id) === String(unitId));
+      if (unit) return unit;
+    }
+    return null;
+  };
+
+  const restoreCatalogFromParams = async ({ catalog, vehicleId, ssd, unitId, detailCode }) => {
+    if (!catalog || !vehicleId || !ssd) return;
+    setIsLoading(true);
+    setError(null);
+    setSearchCategory(null);
+    setSearchQuery('');
+    setCars([]);
+    setCarParts(null);
+    setProducts([]);
+    setSelectedCarInfo({ id: vehicleId, brand: '', model: '', full: null });
+
+    try {
+      if (!laximoData || laximoData.catalog !== catalog || laximoData.ssd !== ssd) {
+        const data = await getCarCatalog(catalog, vehicleId, ssd);
+        setLaximoData(data);
+        const unit = findUnitById(data, unitId) || data.categories?.[0]?.units?.[0] || null;
+        if (unit) setSelectedSubGroup(unit);
+      } else if (unitId) {
+        const unit = findUnitById(laximoData, unitId);
+        if (unit) setSelectedSubGroup(unit);
+      }
+
+      setSelectedDetailCode(detailCode || null);
+    } catch (err) {
+      setError('Не удалось загрузить данные каталога');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Инициализация поиска из URL параметров (поддерживаем старые и новые имена параметров)
   useEffect(() => {
     const vinParam = searchParams.get('search_vin') || searchParams.get('vin');
     const plateParam = searchParams.get('search_plate_number') || searchParams.get('number');
     const articleParam = searchParams.get('search_article') || searchParams.get('article');
+    const catalogParam = searchParams.get('catalog');
+    const vehicleParam = searchParams.get('vehicleId');
+    const ssdParam = searchParams.get('ssd');
+    const unitParam = searchParams.get('unit');
+    const detailParam = searchParams.get('detail');
+
+    if (catalogParam && vehicleParam && ssdParam) {
+      isRestoringRef.current = true;
+      restoreCatalogFromParams({
+        catalog: catalogParam,
+        vehicleId: vehicleParam,
+        ssd: ssdParam,
+        unitId: unitParam,
+        detailCode: detailParam,
+      }).finally(() => {
+        isRestoringRef.current = false;
+      });
+      return;
+    }
 
     if (vinParam) {
       setSearchQuery(vinParam);
@@ -347,6 +407,28 @@ function App({ searchType }) {
       setActivePart(prev => ({ ...prev, isImageLoading: false }));
     }
   };
+
+  useEffect(() => {
+    if (isRestoringRef.current) return;
+    if (!laximoData?.catalog || !selectedSubGroup?.id) return;
+
+    const params = new URLSearchParams();
+    params.set('catalog', laximoData.catalog);
+    params.set('vehicleId', selectedCarInfo?.id || '');
+    params.set('ssd', laximoData.ssd || '');
+    params.set('unit', selectedSubGroup.id);
+    if (selectedDetailCode) params.set('detail', selectedDetailCode);
+
+    if (!params.get('vehicleId') || !params.get('ssd')) return;
+
+    navigate(
+      {
+        pathname: location.pathname || '/',
+        search: `?${params.toString()}`,
+      },
+      { replace: false }
+    );
+  }, [laximoData?.catalog, laximoData?.ssd, selectedSubGroup?.id, selectedDetailCode, selectedCarInfo?.id, location.pathname, navigate]);
 
   return (
     <ThemeProvider theme={theme}>
