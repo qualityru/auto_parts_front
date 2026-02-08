@@ -1,27 +1,20 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import {
-  Box, Container, Typography, Stack, Grid, CssBaseline, Divider,
-  List, ListItem, ListItemText, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Breadcrumbs, Link, Card,
-  CardContent, Accordion, AccordionSummary, AccordionDetails,
-  Button, Fade, CircularProgress, IconButton, Tooltip
-} from '@mui/material';
+import { Box, Container, CssBaseline } from '@mui/material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import SearchIcon from '@mui/icons-material/Search';
 import { YMInitializer } from 'react-yandex-metrika';
 import ym from 'react-yandex-metrika';
-import Zoom from 'react-medium-image-zoom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import 'react-medium-image-zoom/dist/styles.css';
 
 import Header from './components/Header';
-import ProductCard from './components/ProductCard';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorMessage from './components/ErrorMessage';
 import MainBody from './components/MainBody';
 import Footer from './components/Footer';
+import SearchBreadcrumbs from './components/SearchBreadcrumbs';
+import LaximoCatalogView from './components/LaximoCatalogView';
+import CarPartsCatalogView from './components/CarPartsCatalogView';
+import CarsGrid from './components/CarsGrid';
+import ProductsGrid from './components/ProductsGrid';
 
 // Импорт API
 import { 
@@ -39,41 +32,6 @@ const renderSafeText = (value) => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') return value.name || value.id || '---';
   return String(value);
-};
-
-// --- КОМПОНЕНТ ДЛЯ ПЛАВНОЙ ЗАГРУЗКИ КАРТИНКИ ---
-const SmartImage = ({ src }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  useEffect(() => { setIsLoaded(false); }, [src]);
-
-  return (
-    <Box sx={{ 
-      position: 'relative', width: '100%', height: '100%', 
-      display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 
-    }}>
-      {!isLoaded && (
-        <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <CircularProgress size={40} thickness={4} />
-          <Typography variant="caption" color="text.secondary">Загрузка изображения...</Typography>
-        </Box>
-      )}
-      <Fade in={isLoaded} timeout={800}>
-        <div style={{ width: '100%', height: '100%', display: isLoaded ? 'flex' : 'none', justifyContent: 'center' }}>
-          <Zoom>
-            <img
-              src={src}
-              alt="деталь"
-              onLoad={() => setIsLoaded(true)}
-              style={{ 
-                maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain',
-                borderRadius: '8px', cursor: 'zoom-in'
-              }}
-            />
-          </Zoom>
-        </div>
-      </Fade>
-    </Box>
-  );
 };
 
 // Структурирование данных обычного каталога (по группам)
@@ -118,6 +76,8 @@ function App({ searchType }) {
   const [selectedSubGroup, setSelectedSubGroup] = useState(null);
   const [selectedCarInfo, setSelectedCarInfo] = useState(null);
   const [activePart, setActivePart] = useState(null);
+  const [hoveredDetailCode, setHoveredDetailCode] = useState(null);
+  const [selectedDetailCode, setSelectedDetailCode] = useState(null);
   const activeStream = useRef(null);
   const hasFirstArticleItem = useRef(false);
   const loadingStartRef = useRef(0);
@@ -206,12 +166,19 @@ function App({ searchType }) {
     }
   }, [selectedSubGroup?.id]);
 
+  useEffect(() => {
+    setHoveredDetailCode(null);
+    setSelectedDetailCode(null);
+  }, [selectedSubGroup?.id]);
+
   const resetToHome = () => {
     setCarParts(null);
     setLaximoData(null);
     setSelectedCarInfo(null);
     setActivePart(null);
     setSelectedSubGroup(null);
+    setHoveredDetailCode(null);
+    setSelectedDetailCode(null);
     setProducts([]);
     setCars([]);
     setSearchQuery('');
@@ -235,7 +202,9 @@ function App({ searchType }) {
     setCars([]);
     setCarParts(null);
     setLaximoData(null);
-    setSelectedCarInfo(null);
+      setSelectedCarInfo(null);
+      setHoveredDetailCode(null);
+      setSelectedDetailCode(null);
 
     ym('reachGoal', 'SEARCH_INIT', { query: term });
 
@@ -331,10 +300,10 @@ function App({ searchType }) {
     try {
       if (car.catalog && car.ssd) {
         const data = await getCarCatalog(car.catalog, car.vehicleid || car.id, car.ssd);
-        setLaximoData(data);
-        if (data.categories?.[0]?.units?.[0]) {
-            setSelectedSubGroup(data.categories[0].units[0]);
-        }
+      setLaximoData(data);
+      if (data.categories?.[0]?.units?.[0]) {
+          setSelectedSubGroup(data.categories[0].units[0]);
+      }
       } else {
         const data = await getPartsByCarId(car.id || car.vehicleid);
         if (data?.list) setCarParts(structurePartsData(data.list));
@@ -351,6 +320,10 @@ function App({ searchType }) {
     setCarParts(null); 
     setLaximoData(null);
     handleUniversalSearch(code);
+  };
+
+  const handleSelectDetailCode = (code) => {
+    setSelectedDetailCode((prev) => (prev === code ? null : code));
   };
 
   const handleArticleSelect = async (part) => {
@@ -387,211 +360,45 @@ function App({ searchType }) {
         />
         <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
           
-          {(selectedCarInfo || products.length > 0 || carParts || laximoData || cars.length > 0) && (
-            <Breadcrumbs sx={{ mb: 2, bgcolor: 'background.paper', p: '8px 16px', borderRadius: 2 }}>
-              <Link component="button" variant="body2" onClick={resetToHome} underline="hover" color="inherit">
-                Главная
-              </Link>
-              
-              {searchCategory === 'vin' && (
-                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
-                  Поиск по VIN: {searchQuery}
-                </Typography>
-              )}
-              
-              {searchCategory === 'plate_number' && (
-                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
-                  Поиск по гос. номеру: {searchQuery}
-                </Typography>
-              )}
-              
-              {searchCategory === 'article' && (
-                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
-                  Поиск по артикулу: {searchQuery}
-                </Typography>
-              )}
-              
-              {selectedCarInfo && !searchCategory && (
-                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
-                  {selectedCarInfo.brand} {selectedCarInfo.model}
-                </Typography>
-              )}
-              
-              {selectedSubGroup && laximoData && (
-                <Typography variant="body2" color="primary" sx={{ fontWeight: 700 }}>
-                  {selectedSubGroup.name}
-                </Typography>
-              )}
-            </Breadcrumbs>
-          )}
+          <SearchBreadcrumbs
+            show={Boolean(selectedCarInfo || products.length > 0 || carParts || laximoData || cars.length > 0)}
+            searchCategory={searchCategory}
+            searchQuery={searchQuery}
+            selectedCarInfo={selectedCarInfo}
+            selectedSubGroup={selectedSubGroup}
+            laximoData={laximoData}
+            onReset={resetToHome}
+          />
 
           {error && <ErrorMessage message={String(error)} onClose={() => setError(null)} />}
 
           {(isLoading && products.length === 0 && cars.length === 0) || (isArticleSearching && products.length === 0) ? (
             <LoadingSpinner />
           ) : laximoData ? (
-            <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto' }}>
-              <Grid item xs={2} sx={{ minWidth: '220px', maxWidth: '280px', flexShrink: 0 }}>
-                <Stack spacing={0.5} sx={{ maxHeight: '78vh', overflowY: 'auto', pr: 1 }}>
-                  {laximoData.categories?.map((cat) => (
-                    <Accordion key={cat.id} disableGutters elevation={0} sx={{ bgcolor: 'transparent', borderBottom: '1px solid #eee' }}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: '1rem' }} />}>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.75rem', lineHeight: 1.2 }}>{cat.name}</Typography>
-                      </AccordionSummary>
-                      <AccordionDetails sx={{ p: 0 }}>
-                        <List dense disablePadding>
-                          {cat.units?.map((unit) => (
-                            <ListItem button key={unit.id} 
-                              onClick={() => setSelectedSubGroup(unit)} 
-                              selected={selectedSubGroup?.id === unit.id}
-                              sx={{ py: 0.4, pl: 2 }}
-                            >
-                              <ListItemText primary={unit.name} primaryTypographyProps={{ fontSize: '0.7rem', lineHeight: 1.1 }} />
-                            </ListItem>
-                          ))}
-                        </List>
-                      </AccordionDetails>
-                    </Accordion>
-                  ))}
-                </Stack>
-              </Grid>
-              <Grid item xs={7} sx={{ minWidth: '500px', flexGrow: 1 }}>
-                <Paper variant="outlined" sx={{ p: 2, height: '78vh', display: 'flex', flexDirection: 'column', borderRadius: 4, bgcolor: '#fff' }}>
-                  {selectedSubGroup ? (
-                    <>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1, fontSize: '0.85rem' }}>{selectedSubGroup.name}</Typography>
-                      <Divider sx={{ mb: 1.5 }} />
-                      <Box sx={{ flex: 1, overflow: 'hidden' }}><SmartImage key={selectedSubGroup.id} src={selectedSubGroup.image} /></Box>
-                    </>
-                  ) : <Typography align="center" sx={{ mt: 4 }}>Выберите узел</Typography>}
-                </Paper>
-              </Grid>
-              <Grid item xs={3} sx={{ minWidth: '280px', maxWidth: '350px', flexShrink: 0 }}>
-                {selectedSubGroup && (
-                  <TableContainer component={Paper} variant="outlined" sx={{ height: '78vh', borderRadius: 3 }}>
-                    {isDetailsLoading ? (
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 10, gap: 2 }}>
-                        <CircularProgress size={30} /><Typography variant="caption">Загрузка деталей...</Typography>
-                      </Box>
-                    ) : (
-                      <Table stickyHeader size="small">
-                        <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>№ / Деталь</TableCell></TableRow></TableHead>
-                        <TableBody>
-                          {selectedSubGroup.details?.map((detail, idx) => (
-                            <TableRow key={idx} hover sx={{ cursor: 'pointer' }}>
-                              <TableCell sx={{ py: 1 }}>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography sx={{ fontWeight: 800, color: 'text.disabled', minWidth: 24, fontSize: '0.7rem' }}>
-                                    {detail.codeonimage || idx + 1}
-                                  </Typography>
-                                  <Box sx={{ flex: 1 }}>
-                                      <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.75rem' }}>{detail.oem || '---'}</Typography>
-                                      <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>{detail.name}</Typography>
-                                  </Box>
-                                  {detail.oem && (
-                                      <IconButton size="small" onClick={() => goToPrices(detail.oem)} color="primary"><SearchIcon fontSize="small" /></IconButton>
-                                  )}
-                                </Stack>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </TableContainer>
-                )}
-              </Grid>
-            </Grid>
+            <LaximoCatalogView
+              laximoData={laximoData}
+              selectedSubGroup={selectedSubGroup}
+              setSelectedSubGroup={setSelectedSubGroup}
+              isDetailsLoading={isDetailsLoading}
+              goToPrices={goToPrices}
+              hoveredCode={hoveredDetailCode}
+              selectedCode={selectedDetailCode}
+              onHoverCode={setHoveredDetailCode}
+              onSelectCode={handleSelectDetailCode}
+            />
           ) : carParts ? (
-            <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto' }}>
-              <Grid item xs={2} sx={{ minWidth: '220px', maxWidth: '280px', flexShrink: 0 }}>
-                <Stack spacing={0.5} sx={{ maxHeight: '78vh', overflowY: 'auto', pr: 1 }}>
-                  {Object.entries(carParts).map(([id, group]) => (
-                    <Accordion key={id} disableGutters sx={{ bgcolor: 'transparent' }}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}><Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{group.name}</Typography></AccordionSummary>
-                      <AccordionDetails sx={{ p: 0 }}>
-                        <List dense>
-                          {Object.entries(group.subGroups).map(([sid, sub]) => (
-                            <ListItem button key={sid} onClick={() => setSelectedSubGroup(sub)} selected={selectedSubGroup?.name === sub.name}>
-                              <ListItemText primary={sub.name} primaryTypographyProps={{ fontSize: '0.7rem' }} />
-                            </ListItem>
-                          ))}
-                        </List>
-                      </AccordionDetails>
-                    </Accordion>
-                  ))}
-                </Stack>
-              </Grid>
-              <Grid item xs={7} sx={{ flexGrow: 1 }}>
-                 <Paper variant="outlined" sx={{ p: 2, height: '78vh', borderRadius: 4 }}>
-                    {activePart ? (
-                      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{activePart.code} — {activePart.name}</Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Box sx={{ flex: 1 }}><SmartImage src={activePart.images?.[0]} /></Box>
-                        <Button variant="contained" onClick={() => goToPrices(activePart.code)} sx={{ mt: 1 }}>Найти цены</Button>
-                      </Box>
-                    ) : <Typography align="center" sx={{ mt: 4 }}>Выберите деталь</Typography>}
-                 </Paper>
-              </Grid>
-              <Grid item xs={3} sx={{ minWidth: '280px' }}>
-                {selectedSubGroup && (
-                  <TableContainer component={Paper} variant="outlined" sx={{ height: '78vh' }}>
-                    <Table size="small" stickyHeader>
-                      <TableHead><TableRow><TableCell sx={{ fontWeight: 800, fontSize: '0.7rem' }}>№ / Деталь</TableCell></TableRow></TableHead>
-                      <TableBody>
-                        {selectedSubGroup.parts?.map((part) => (
-                          <TableRow key={part.key} hover onClick={() => handleArticleSelect(part)} sx={{ cursor: 'pointer' }}>
-                            <TableCell sx={{ py: 1 }}>
-                               <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography sx={{ fontWeight: 800, color: 'text.disabled', minWidth: 24, fontSize: '0.7rem' }}>
-                                    {part.position}
-                                  </Typography>
-                                  <Box>
-                                    <Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{part.code}</Typography>
-                                    <Typography sx={{ fontSize: '0.65rem' }}>{part.name}</Typography>
-                                  </Box>
-                               </Stack>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </Grid>
-            </Grid>
+            <CarPartsCatalogView
+              carParts={carParts}
+              selectedSubGroup={selectedSubGroup}
+              setSelectedSubGroup={setSelectedSubGroup}
+              activePart={activePart}
+              handleArticleSelect={handleArticleSelect}
+              goToPrices={goToPrices}
+            />
           ) : cars.length > 0 ? (
-            <Grid container spacing={2}>
-              {cars.map((car) => (
-                <Grid item xs={12} sm={4} key={car.id || car.vehicleid}>
-                  <Card variant="outlined" sx={{ cursor: 'pointer', borderRadius: 4, '&:hover': { borderColor: 'primary.main', boxShadow: 2 } }} onClick={() => handleSelectCar(car)}>
-                    <CardContent>
-                      <Typography fontWeight={800} color="primary" variant="h6">{renderSafeText(car.brand)} {renderSafeText(car.name || car.model)}</Typography>
-                      <Typography variant="body2" color="text.secondary">Год: {renderSafeText(car.manufactured || car.year)}</Typography>
-                      <Typography variant="body2" color="text.secondary">Двиг: {renderSafeText(car.engine || car.engine_code)}</Typography>
-                      {car.vin && <Typography variant="caption" sx={{ color: 'text.disabled' }}>VIN: {car.vin}</Typography>}
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
+            <CarsGrid cars={cars} onSelectCar={handleSelectCar} renderSafeText={renderSafeText} />
           ) : products.length > 0 ? (
-            <Box>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 800 }}>Предложения: {searchQuery}</Typography>
-              <Grid container spacing={2}>
-                {products.map(p => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={p.internalId}>
-                    <ProductCard 
-                      product={p} 
-                      onAddToCart={() => {}} 
-                      isItemInCart={() => false} 
-                      onOpenImageModal={() => {}} 
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
+            <ProductsGrid products={products} searchQuery={searchQuery} />
           ) : (
             <MainBody onExampleSearch={(q) => handleUniversalSearch(q)} />
           )}
