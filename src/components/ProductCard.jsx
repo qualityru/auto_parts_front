@@ -24,7 +24,7 @@ import {
 // --- СТИЛИЗАЦИЯ (СТРОГАЯ ГЕОМЕТРИЯ) ---
 
 const StyledCard = styled(Card)(({ theme }) => ({
-  width: 320,
+  width: 360,
   height: 600,
   display: 'flex',
   flexDirection: 'column',
