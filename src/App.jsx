@@ -34,6 +34,23 @@ const renderSafeText = (value) => {
   return String(value);
 };
 
+const normalizeArticle = (value) => String(value ?? '').trim();
+
+const mergeImages = (prevImages = [], nextImages = []) => {
+  const all = [...prevImages, ...nextImages];
+  const unique = [];
+  const seen = new Set();
+
+  all.forEach((img) => {
+    const normalized = typeof img === 'string' ? img.trim() : '';
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    unique.push(normalized);
+  });
+
+  return unique;
+};
+
 // Структурирование данных обычного каталога (по группам)
 const structurePartsData = (partsList) => {
   if (!Array.isArray(partsList)) return {};
@@ -79,6 +96,7 @@ function App({ searchType }) {
   const [activePart, setActivePart] = useState(null);
   const [hoveredDetailCode, setHoveredDetailCode] = useState(null);
   const [selectedDetailCode, setSelectedDetailCode] = useState(null);
+  const [breadcrumbHistory, setBreadcrumbHistory] = useState([]);
   const activeStream = useRef(null);
   const hasFirstArticleItem = useRef(false);
   const loadingStartRef = useRef(0);
@@ -243,15 +261,152 @@ function App({ searchType }) {
     setCars([]);
     setSearchQuery('');
     setSearchCategory(null);
+    setBreadcrumbHistory([]);
     navigate('/');
     if (activeStream.current) activeStream.current.abort();
     ym('hit', '/');
   };
 
-  const handleUniversalSearch = async (query) => {
+  const cloneSnapshotValue = (value) => {
+    if (value === null || value === undefined) return value;
+    return JSON.parse(JSON.stringify(value));
+  };
+
+  const buildStateSnapshot = () => ({
+    searchCategory,
+    searchQuery,
+    products: cloneSnapshotValue(products),
+    cars: cloneSnapshotValue(cars),
+    carParts: cloneSnapshotValue(carParts),
+    laximoData: cloneSnapshotValue(laximoData),
+    selectedSubGroup: cloneSnapshotValue(selectedSubGroup),
+    selectedCarInfo: cloneSnapshotValue(selectedCarInfo),
+    activePart: cloneSnapshotValue(activePart),
+    hoveredDetailCode,
+    selectedDetailCode,
+    path: location.pathname,
+    query: location.search,
+  });
+
+  const applyStateSnapshot = (snapshot) => {
+    if (!snapshot) return;
+    if (activeStream.current) activeStream.current.abort();
+
+    setError(null);
+    setIsLoading(false);
+    setIsArticleSearching(false);
+    setSearchCategory(snapshot.searchCategory ?? null);
+    setSearchQuery(snapshot.searchQuery ?? '');
+    setProducts(snapshot.products || []);
+    setCars(snapshot.cars || []);
+    setCarParts(snapshot.carParts || null);
+    setLaximoData(snapshot.laximoData || null);
+    setSelectedSubGroup(snapshot.selectedSubGroup || null);
+    setSelectedCarInfo(snapshot.selectedCarInfo || null);
+    setActivePart(snapshot.activePart || null);
+    setHoveredDetailCode(snapshot.hoveredDetailCode || null);
+    setSelectedDetailCode(snapshot.selectedDetailCode || null);
+
+    const nextPath = snapshot.path || '/';
+    const nextQuery = snapshot.query || '';
+    const target = `${nextPath}${nextQuery}`;
+    const current = `${location.pathname}${location.search}`;
+    if (target !== current) {
+      navigate(target, { replace: false });
+    }
+  };
+
+  const pushBreadcrumbCheckpoint = (label) => {
+    const snapshot = buildStateSnapshot();
+    const item = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label,
+      snapshot,
+    };
+    setBreadcrumbHistory((prev) => [...prev, item].slice(-8));
+  };
+
+  const restoreBreadcrumbCheckpoint = (index) => {
+    if (index < 0 || index >= breadcrumbHistory.length) return;
+    const target = breadcrumbHistory[index];
+    applyStateSnapshot(target.snapshot);
+    setBreadcrumbHistory((prev) => prev.slice(0, index));
+  };
+
+  const getCurrentCrumbLabel = () => {
+    if (laximoData && selectedSubGroup) return `Узел: ${selectedSubGroup.name || '—'}`;
+    if (carParts && activePart) return `Деталь: ${activePart.code || activePart.name || '—'}`;
+    if (carParts && selectedSubGroup) return `Группа: ${selectedSubGroup.name || '—'}`;
+    if (selectedCarInfo) return `${selectedCarInfo.brand || ''} ${selectedCarInfo.model || ''}`.trim() || 'Автомобиль';
+    if (cars.length > 0) return `Автомобили: ${cars.length}`;
+    if (products.length > 0) return `Результаты: ${searchQuery || 'Артикул'}`;
+    if (searchCategory && searchQuery) return `Поиск: ${searchQuery}`;
+    return '';
+  };
+
+  const handleBreadcrumbBack = () => {
+    if (selectedDetailCode) {
+      setSelectedDetailCode(null);
+      return;
+    }
+
+    if (laximoData && selectedSubGroup) {
+      setSelectedSubGroup(null);
+      return;
+    }
+
+    if (carParts && activePart) {
+      setActivePart(null);
+      return;
+    }
+
+    if (carParts && selectedSubGroup) {
+      setSelectedSubGroup(null);
+      return;
+    }
+
+    if ((laximoData || carParts) && selectedCarInfo) {
+      setLaximoData(null);
+      setCarParts(null);
+      setSelectedSubGroup(null);
+      setActivePart(null);
+      setSelectedDetailCode(null);
+      if (selectedCarInfo.full) {
+        setCars([selectedCarInfo.full]);
+      }
+      return;
+    }
+
+    if (breadcrumbHistory.length > 0) {
+      restoreBreadcrumbCheckpoint(breadcrumbHistory.length - 1);
+      return;
+    }
+
+    if (products.length > 0 || cars.length > 0 || searchCategory) {
+      resetToHome();
+      return;
+    }
+
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    resetToHome();
+  };
+
+  const handleUniversalSearch = async (query, options = {}) => {
     const term = query?.trim() || searchQuery.trim();
     if (!term) return;
     if (activeStream.current) activeStream.current.abort();
+
+    const currentContextLabel = getCurrentCrumbLabel();
+    const hasMeaningfulContext = Boolean(
+      selectedCarInfo || selectedSubGroup || laximoData || carParts || activePart || products.length > 0 || cars.length > 0
+    );
+    if (!options.skipCheckpoint && currentContextLabel && hasMeaningfulContext) {
+      pushBreadcrumbCheckpoint(currentContextLabel);
+    }
     
     setIsLoading(true);
     startLoadingTimer();
@@ -319,8 +474,8 @@ function App({ searchType }) {
           },
           onImages: (imageData) => {
             setProducts(prev => prev.map(p => {
-              if (p.article === imageData.article) {
-                return { ...p, images: imageData.images };
+              if (normalizeArticle(p.article) === normalizeArticle(imageData.article)) {
+                return { ...p, images: mergeImages(p.images, imageData.images) };
               }
               return p;
             }));
@@ -377,9 +532,13 @@ function App({ searchType }) {
 
   const goToPrices = (code) => {
     if (!code) return;
+    const contextLabel = getCurrentCrumbLabel();
+    if (contextLabel) {
+      pushBreadcrumbCheckpoint(contextLabel);
+    }
     setCarParts(null); 
     setLaximoData(null);
-    handleUniversalSearch(code);
+    handleUniversalSearch(code, { skipCheckpoint: true });
   };
 
   const handleSelectDetailCode = (code) => {
@@ -438,18 +597,31 @@ function App({ searchType }) {
         <Header 
           searchQuery={searchQuery} setSearchQuery={setSearchQuery}
           onSearch={() => handleUniversalSearch()} themeMode={themeMode}
+          onHome={resetToHome}
           onToggleTheme={() => setThemeMode(t => t === 'light' ? 'dark' : 'light')}
         />
         <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
           
           <SearchBreadcrumbs
-            show={Boolean(selectedCarInfo || products.length > 0 || carParts || laximoData || cars.length > 0)}
-            searchCategory={searchCategory}
-            searchQuery={searchQuery}
-            selectedCarInfo={selectedCarInfo}
-            selectedSubGroup={selectedSubGroup}
-            laximoData={laximoData}
+            show={Boolean(
+              breadcrumbHistory.length > 0
+              || selectedCarInfo
+              || products.length > 0
+              || carParts
+              || laximoData
+              || cars.length > 0
+              || Boolean(searchCategory && searchQuery)
+              || isLoading
+              || isArticleSearching
+            )}
+            historyItems={breadcrumbHistory.map((item) => ({ id: item.id, label: item.label }))}
+            currentLabel={getCurrentCrumbLabel()}
+            onHistoryClick={(id) => {
+              const index = breadcrumbHistory.findIndex((item) => item.id === id);
+              if (index >= 0) restoreBreadcrumbCheckpoint(index);
+            }}
             onReset={resetToHome}
+            onBack={handleBreadcrumbBack}
           />
 
           {error && <ErrorMessage message={String(error)} onClose={() => setError(null)} />}

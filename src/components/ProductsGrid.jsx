@@ -4,12 +4,12 @@ import {
   Typography,
   Paper,
   Stack,
+  Button,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   OutlinedInput,
-  Chip,
   Slider,
   Checkbox,
   ListItemText,
@@ -23,9 +23,58 @@ const getIsCross = (product) => (
 );
 
 const getReturnInfo = (warehouse) => {
-  const info = warehouse.supplier_info?.original_data;
-  if (!info || info.return_type?.id === '3') return false;
-  return Boolean(info.back_days);
+  const info = warehouse.supplier_info?.original_data || {};
+  const returnType = info.return_type || {};
+  const returnTypeName = String(returnType.name || '').toLowerCase();
+  const returnTypeId = String(returnType.id || '');
+  const armtekDays = Number(info.RETDAYS);
+  const backDays = Number(info.back_days);
+  const backPercent = Number(info.back_percent);
+
+  if (returnTypeId === '3' || returnTypeName.includes('невозмож') || backPercent === -1) return false;
+  if (returnTypeId && returnTypeId !== '3') return true;
+  if (returnTypeName.includes('возмож')) return true;
+  return (armtekDays > 0) || (backDays > 0);
+};
+
+const parseDateValue = (value) => {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (/^\d{2}\.\d{2}\.\d{4}/.test(raw)) {
+    const [day, month, year] = raw.slice(0, 10).split('.');
+    const date = new Date(`${year}-${month}-${day}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (/^\d{14}$/.test(raw)) {
+    const year = raw.slice(0, 4);
+    const month = raw.slice(4, 6);
+    const day = raw.slice(6, 8);
+    const date = new Date(`${year}-${month}-${day}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+};
+
+const getDeliveryMetric = (warehouse) => {
+  const directDays = Number(warehouse.delivery_days);
+  if (!Number.isNaN(directDays) && directDays > 0) return directDays;
+
+  const startDate = parseDateValue(warehouse.delivery_date_start);
+  const endDate = parseDateValue(warehouse.delivery_date_end);
+  const target = startDate || endDate;
+  if (!target) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diff);
 };
 
 const getWarehouseSupplierName = (warehouse) => {
@@ -58,7 +107,7 @@ const getProductMetrics = (product) => {
     : 0;
 
   const minDelivery = warehouses.length
-    ? Math.min(...warehouses.map((w) => Number(w.delivery_days) || 0))
+    ? Math.min(...warehouses.map((w) => getDeliveryMetric(w)))
     : 0;
 
   const hasReturn = warehouses.some((w) => getReturnInfo(w));
@@ -111,10 +160,20 @@ const ProductsGrid = ({ products, searchQuery }) => {
   const [returnFilter, setReturnFilter] = useState('all');
   const [priceRange, setPriceRange] = useState([0, maxPrice]);
   const [deliveryRange, setDeliveryRange] = useState([0, maxDelivery]);
-  const [sortBy, setSortBy] = useState('priceAsc');
+  const [sortBy, setSortBy] = useState('origin');
   const allSuppliersSelected = isAllSuppliersMode
     || (supplierNames.length > 0 && selectedSuppliers.length === supplierNames.length);
   const someSuppliersSelected = !allSuppliersSelected && selectedSuppliers.length > 0;
+
+  const resetFilters = () => {
+    setIsAllSuppliersMode(true);
+    setSelectedSuppliers(supplierNames);
+    setOriginFilter('all');
+    setReturnFilter('all');
+    setSortBy('origin');
+    setPriceRange([0, maxPrice]);
+    setDeliveryRange([0, maxDelivery]);
+  };
 
   useEffect(() => {
     if (supplierNames.length === 0) {
@@ -203,40 +262,30 @@ const ProductsGrid = ({ products, searchQuery }) => {
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} sx={{ mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 800 }}>
-          Предложения: {searchQuery}
-        </Typography>
-        <Chip
-          label={`Найдено: ${filteredAndSorted.length} из ${products.length}`}
-          sx={{ fontWeight: 700, bgcolor: 'primary.main', color: 'primary.contrastText' }}
-        />
-      </Stack>
-
       <Paper
         elevation={0}
         sx={{
-          p: 1.5,
-          mb: 3,
-          borderRadius: 3,
+          p: 1.25,
+          mb: 1.25,
+          borderRadius: 2.5,
           border: '1px solid',
           borderColor: 'divider',
-          background: (theme) => theme.palette.mode === 'light'
-            ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(234,244,255,0.95))'
-            : 'linear-gradient(135deg, rgba(19,27,35,0.95), rgba(15,37,56,0.95))',
-          backdropFilter: 'blur(6px)',
+          backgroundColor: 'background.paper',
         }}
       >
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: '2.3fr 1.1fr 1.1fr 1.8fr 1.35fr 1.35fr',
-            gap: 1.5,
+            gap: 1,
             alignItems: 'center',
-            width: '100%',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: '1fr 1fr',
+              md: 'minmax(220px, 2fr) minmax(180px, 1.1fr) minmax(140px, 0.9fr) minmax(140px, 0.9fr) minmax(170px, 1.1fr) minmax(170px, 1.1fr) auto',
+            },
           }}
         >
-          <FormControl size="small" sx={{ width: '100%' }}>
+          <FormControl size="small" sx={{ minWidth: 0 }}>
             <InputLabel id="supplier-filter-label">Поставщики</InputLabel>
             <Select
               labelId="supplier-filter-label"
@@ -289,35 +338,7 @@ const ProductsGrid = ({ products, searchQuery }) => {
             </Select>
           </FormControl>
 
-          <FormControl size="small" sx={{ width: '100%', '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
-            <InputLabel id="origin-filter-label">Тип детали</InputLabel>
-            <Select
-              labelId="origin-filter-label"
-              value={originFilter}
-              label="Тип детали"
-              onChange={(e) => setOriginFilter(e.target.value)}
-            >
-              <MenuItem value="all">Все типы</MenuItem>
-              <MenuItem value="original">Оригинал</MenuItem>
-              <MenuItem value="analog">Аналог</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ width: '100%', '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
-            <InputLabel id="return-filter-label">Возврат</InputLabel>
-            <Select
-              labelId="return-filter-label"
-              value={returnFilter}
-              label="Возврат"
-              onChange={(e) => setReturnFilter(e.target.value)}
-            >
-              <MenuItem value="all">Любой</MenuItem>
-              <MenuItem value="possible">Возможен</MenuItem>
-              <MenuItem value="not_possible">Без возврата</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ width: '100%', '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
+          <FormControl size="small" sx={{ minWidth: 0, '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
             <InputLabel id="sort-by-label">Сортировка</InputLabel>
             <Select
               labelId="sort-by-label"
@@ -349,7 +370,35 @@ const ProductsGrid = ({ products, searchQuery }) => {
             </Select>
           </FormControl>
 
-          <Box sx={{ width: '100%', px: 0.5 }}>
+          <FormControl size="small" sx={{ minWidth: 0, '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
+            <InputLabel id="origin-filter-label">Тип детали</InputLabel>
+            <Select
+              labelId="origin-filter-label"
+              value={originFilter}
+              label="Тип детали"
+              onChange={(e) => setOriginFilter(e.target.value)}
+            >
+              <MenuItem value="all">Все типы</MenuItem>
+              <MenuItem value="original">Оригинал</MenuItem>
+              <MenuItem value="analog">Аналог</MenuItem>
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 0, '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
+            <InputLabel id="return-filter-label">Возврат</InputLabel>
+            <Select
+              labelId="return-filter-label"
+              value={returnFilter}
+              label="Возврат"
+              onChange={(e) => setReturnFilter(e.target.value)}
+            >
+              <MenuItem value="all">Любой</MenuItem>
+              <MenuItem value="possible">Возможен</MenuItem>
+              <MenuItem value="not_possible">Без возврата</MenuItem>
+            </Select>
+          </FormControl>
+
+          <Box sx={{ minWidth: 0, px: 0.5 }}>
             <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
               Цена: {normalizedPriceRange[0]}-{normalizedPriceRange[1]} ₽
             </Typography>
@@ -366,9 +415,9 @@ const ProductsGrid = ({ products, searchQuery }) => {
             />
           </Box>
 
-          <Box sx={{ width: '100%', px: 0.5 }}>
+          <Box sx={{ minWidth: 0, px: 0.5 }}>
             <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-              Доставка: {normalizedDeliveryRange[0]}-{normalizedDeliveryRange[1]} дн.
+              Срок: {normalizedDeliveryRange[0]}-{normalizedDeliveryRange[1]} дн.
             </Typography>
             <Slider
               value={normalizedDeliveryRange}
@@ -382,15 +431,29 @@ const ProductsGrid = ({ products, searchQuery }) => {
               size="small"
             />
           </Box>
+
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={resetFilters}
+            sx={{
+              minWidth: { xs: '100%', md: 124 },
+              height: 40,
+              textTransform: 'none',
+              fontWeight: 700,
+            }}
+          >
+            Сбросить
+          </Button>
         </Box>
       </Paper>
 
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 360px))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
           gap: 2,
-          justifyContent: { xs: 'center', xl: 'space-between' },
+          justifyContent: { xs: 'center', xl: 'stretch' },
         }}
       >
         {filteredAndSorted.map(({ product }) => (
@@ -399,7 +462,6 @@ const ProductsGrid = ({ products, searchQuery }) => {
               product={product}
               onAddToCart={() => {}}
               isItemInCart={() => false}
-              onOpenImageModal={() => {}}
             />
           </Box>
         ))}

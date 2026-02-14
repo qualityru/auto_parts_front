@@ -82,6 +82,7 @@ function Header({
   searchQuery, 
   setSearchQuery, 
   onSearch,
+  onHome,
   cartItems = [],
   onRemoveItem,
   onUpdateQuantity,
@@ -121,6 +122,15 @@ function Header({
     }
   };
 
+  const handleHomeClick = () => {
+    if (typeof onHome === 'function') {
+      onHome();
+      return;
+    }
+    navigate('/');
+    setSearchQuery('');
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') handleSearch();
   };
@@ -156,7 +166,7 @@ function Header({
               direction="row" 
               spacing={1.5} 
               alignItems="center" 
-              onClick={() => { navigate('/'); setSearchQuery(''); }}
+              onClick={handleHomeClick}
               sx={{ cursor: 'pointer', minWidth: 'fit-content', mr: 2 }}
             >
               <Box sx={{ 
@@ -170,10 +180,10 @@ function Header({
               <Typography
                 variant="h5"
                 sx={{ fontWeight: 900, letterSpacing: '-1px', display: { xs: 'none', md: 'block' }, cursor: 'pointer' }}
-                onClick={() => { navigate('/'); setSearchQuery(''); }}
+                onClick={handleHomeClick}
                 tabIndex={0}
                 role="button"
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { navigate('/'); setSearchQuery(''); } }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleHomeClick(); }}
               >
                 BOGTAR
               </Typography>
