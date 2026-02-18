@@ -24,23 +24,25 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 // Импорт корзины и модалки аккаунта
 import CartDrawer from './CartModal';
 import AccountModal from './AccountModal';
 
 // Ультрасовременный контейнер поиска с эффектом фокусировки
-const Search = styled('div')(({ theme }) => ({
+const Search = styled('div', {
+  shouldForwardProp: (prop) => prop !== 'expanded',
+})(({ theme, expanded }) => ({
   position: 'relative',
-  borderRadius: '16px',
+  borderRadius: '999px',
   backgroundColor: alpha(theme.palette.common.white, 0.1),
   border: `1px solid ${alpha(theme.palette.common.white, 0.1)}`,
   display: 'flex',
   alignItems: 'center',
   transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
   width: '100%',
-  maxWidth: '500px',
+  maxWidth: expanded ? '600px' : '500px',
   '&:hover': {
     backgroundColor: alpha(theme.palette.common.white, 0.15),
     border: `1px solid ${alpha(theme.palette.common.white, 0.25)}`,
@@ -125,10 +127,10 @@ function Header({
   const handleHomeClick = () => {
     if (typeof onHome === 'function') {
       onHome();
-      return;
+    } else {
+      setSearchQuery?.('');
     }
     navigate('/');
-    setSearchQuery('');
   };
 
   const handleKeyDown = (e) => {
@@ -150,24 +152,42 @@ function Header({
         position="sticky"
         elevation={trigger ? 8 : 0}
         sx={{
-          background: trigger 
-            ? (theme.palette.mode === 'light' ? 'rgba(25, 118, 210, 0.9)' : 'rgba(10, 25, 41, 0.9)')
-            : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-          backdropFilter: 'blur(12px)',
+          background: 'transparent',
+          boxShadow: 'none',
           transition: 'all 0.3s ease-in-out',
           zIndex: theme.zIndex.drawer + 1,
         }}
       >
         <Container maxWidth="xl">
-          <Toolbar disableGutters sx={{ height: trigger ? 70 : 85, transition: '0.3s' }}>
+          <Toolbar
+            disableGutters
+            sx={{
+              height: trigger ? 70 : 85,
+              transition: '0.3s',
+              px: { xs: 1.5, sm: 2 },
+              borderRadius: { xs: '0 0 16px 16px', md: '0 0 20px 20px' },
+              background: trigger
+                ? (theme.palette.mode === 'light' ? 'rgba(25, 118, 210, 0.9)' : 'rgba(10, 25, 41, 0.9)')
+                : 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
             
             {/* LOGO */}
             <Stack 
+              component={RouterLink}
+              to="/"
               direction="row" 
               spacing={1.5} 
               alignItems="center" 
               onClick={handleHomeClick}
-              sx={{ cursor: 'pointer', minWidth: 'fit-content', mr: 2 }}
+              sx={{
+                cursor: 'pointer',
+                minWidth: 'fit-content',
+                mr: 2,
+                color: 'inherit',
+                textDecoration: 'none',
+              }}
             >
               <Box sx={{ 
                 p: 1, 
@@ -190,8 +210,8 @@ function Header({
             </Stack>
 
             {/* SEARCH BAR */}
-            <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: 2 }}>
-              <Search>
+            <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: { xs: 1, md: 2.5 } }}>
+              <Search expanded={Boolean(searchQuery?.trim())}>
                 <SearchIconWrapper>
                   <SearchIcon />
                 </SearchIconWrapper>
