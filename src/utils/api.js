@@ -1,13 +1,30 @@
-// const BASE = 'http://127.0.0.1:8015/api';
-const BASE = 'https://bogtar.duckdns.org/api';
+const BASE = process.env.REACT_APP_API_BASE || 'https://bogtar.duckdns.org/api';
+// const BASE = process.env.REACT_APP_API_BASE || 'http://127.0.0.1:8015/api';
 
 async function request(path, options = {}) {
   const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {})
+  const token = localStorage.getItem('authToken')
+  if (token && !headers.Authorization) {
+    headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`
+  }
+  const guestCartId = localStorage.getItem('guestCartId')
+  if (guestCartId && !headers['X-Guest-Cart-Id']) {
+    headers['X-Guest-Cart-Id'] = guestCartId
+  }
   const res = await fetch(`${BASE}${path}`, Object.assign({}, options, { headers }))
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || `Ошибка сервера: ${res.status}`)
+    let message = text
+    try {
+      const parsed = JSON.parse(text)
+      message = parsed.detail || parsed.message || text
+    } catch (e) {
+      // keep raw text
+    }
+    const error = new Error(message || `Ошибка сервера: ${res.status}`)
+    error.status = res.status
+    throw error
   }
 
   return res
@@ -197,6 +214,76 @@ export async function getProfile() {
   const res = await request('/auth/me'); 
   return await res.json();
 }
+
+export async function getCart() {
+  const res = await request('/shop/cart')
+  return await res.json()
+}
+
+export async function mergeCart() {
+  const res = await request('/shop/cart/merge', { method: 'POST' })
+  return await res.json()
+}
+
+export async function addCartItem(item) {
+  const res = await request('/shop/cart/items', {
+    method: 'POST',
+    body: JSON.stringify(item),
+  })
+  return await res.json()
+}
+
+export async function updateCartItem(itemId, quantity) {
+  const res = await request(`/shop/cart/items/${encodeURIComponent(itemId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ quantity }),
+  })
+  return await res.json()
+}
+
+export async function removeCartItem(itemId) {
+  const res = await request(`/shop/cart/items/${encodeURIComponent(itemId)}`, {
+    method: 'DELETE',
+  })
+  return await res.json()
+}
+
+export async function clearCartApi() {
+  const res = await request('/shop/cart', { method: 'DELETE' })
+  return await res.json()
+}
+
+export async function createOrder(payload = {}) {
+  const res = await request('/shop/orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return await res.json()
+}
+
+export async function getShopProfile() {
+  const res = await request('/shop/profile')
+  return await res.json()
+}
+
+export async function updateShopProfile(payload) {
+  const res = await request('/shop/profile', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  return await res.json()
+}
+
+export async function getOrders() {
+  const res = await request('/shop/orders')
+  return await res.json()
+}
+
+export async function getOrder(orderId) {
+  const res = await request(`/shop/orders/${encodeURIComponent(orderId)}`)
+  return await res.json()
+}
+
 export async function authorize(payload) {
   const body = normalizeLoginPayload(payload)
   const res = await request('/auth', {

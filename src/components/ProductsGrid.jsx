@@ -122,7 +122,7 @@ const getProductMetrics = (product) => {
   };
 };
 
-const ProductsGrid = ({ products, searchQuery }) => {
+const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
   const preparedProducts = useMemo(
     () => products.map((product) => ({ product, metrics: getProductMetrics(product) })),
     [products],
@@ -460,8 +460,8 @@ const ProductsGrid = ({ products, searchQuery }) => {
           <Box key={product.internalId} sx={{ display: 'flex', justifyContent: 'center' }}>
             <ProductCard
               product={product}
-              onAddToCart={() => {}}
-              isItemInCart={() => false}
+              onAddToCart={onAddToCart}
+              isItemInCart={isItemInCart}
             />
           </Box>
         ))}

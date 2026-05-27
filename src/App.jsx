@@ -15,6 +15,7 @@ import LaximoCatalogView from './components/LaximoCatalogView';
 import CarPartsCatalogView from './components/CarPartsCatalogView';
 import CarsGrid from './components/CarsGrid';
 import ProductsGrid from './components/ProductsGrid';
+import { useCart } from './hooks/useCart';
 
 // Импорт API
 import { 
@@ -97,6 +98,16 @@ function App({ searchType }) {
   const [hoveredDetailCode, setHoveredDetailCode] = useState(null);
   const [selectedDetailCode, setSelectedDetailCode] = useState(null);
   const [breadcrumbHistory, setBreadcrumbHistory] = useState([]);
+  const {
+    cart,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    getCartTotal,
+    isItemInCart,
+    refreshCart,
+  } = useCart();
   const activeStream = useRef(null);
   const hasFirstArticleItem = useRef(false);
   const loadingStartRef = useRef(0);
@@ -599,6 +610,12 @@ function App({ searchType }) {
           onSearch={() => handleUniversalSearch()} themeMode={themeMode}
           onHome={resetToHome}
           onToggleTheme={() => setThemeMode(t => t === 'light' ? 'dark' : 'light')}
+          cartItems={cart}
+          onRemoveItem={removeFromCart}
+          onUpdateQuantity={updateQuantity}
+          onClearCart={clearCart}
+          getCartTotal={getCartTotal}
+          onOrderCreated={refreshCart}
         />
         <Container maxWidth="xl" sx={{ mt: 3, flex: 1, pb: 6 }}>
           
@@ -652,7 +669,12 @@ function App({ searchType }) {
           ) : cars.length > 0 ? (
             <CarsGrid cars={cars} onSelectCar={handleSelectCar} renderSafeText={renderSafeText} />
           ) : products.length > 0 ? (
-            <ProductsGrid products={products} searchQuery={searchQuery} />
+            <ProductsGrid
+              products={products}
+              searchQuery={searchQuery}
+              onAddToCart={addToCart}
+              isItemInCart={isItemInCart}
+            />
           ) : (
             <MainBody onExampleSearch={(q) => handleUniversalSearch(q)} />
           )}

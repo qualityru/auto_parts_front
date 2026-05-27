@@ -30,6 +30,7 @@ function AccountModal({ onClose }) {
   // Функция для успешного завершения (сохранение токена и редирект)
   const handleSuccessAuth = (token) => {
     localStorage.setItem('authToken', token)
+    window.dispatchEvent(new Event('auth-changed'))
     onClose?.() // Закрываем модалку
     navigate('/profile') // 3. Перенаправляем на страницу профиля
   }
@@ -89,7 +90,14 @@ function AccountModal({ onClose }) {
   }
 
   return (
-    <Dialog open={true} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      disablePortal
+      transitionDuration={0}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Stack direction="row" spacing={1} alignItems="center">
           <AccountCircleIcon fontSize="large" color="primary" />

@@ -10,7 +10,9 @@ import {
   Avatar,
   Badge,
   useTheme,
-  alpha
+  alpha,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -18,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import { formatPrice } from '../utils/formatters';
+import { createOrder } from '../utils/api';
 
 const CartDrawer = ({ 
   open, 
@@ -26,9 +29,39 @@ const CartDrawer = ({
   onRemoveItem, 
   onUpdateQuantity, 
   onClearCart, 
-  getCartTotal 
+  getCartTotal,
+  onNeedAuth,
+  onOrderCreated
 }) => {
   const theme = useTheme();
+  const items = Array.isArray(cartItems) ? cartItems : [];
+  const [checkoutError, setCheckoutError] = React.useState('');
+  const [successMessage, setSuccessMessage] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const handleCheckout = async () => {
+    setCheckoutError('');
+    setSuccessMessage('');
+    if (!localStorage.getItem('authToken')) {
+      setCheckoutError('Для оформления заказа войдите или зарегистрируйтесь.');
+      onNeedAuth?.();
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const order = await createOrder();
+      setSuccessMessage(`Заказ #${order.id} оформлен. Статус можно отслеживать в личном кабинете.`);
+      onOrderCreated?.(order);
+    } catch (error) {
+      if (error.status === 400 && String(error.message || '').includes('Заполните')) {
+        setCheckoutError(`${error.message}. Перейдите в личный кабинет и заполните контактные данные.`);
+        return;
+      }
+      setCheckoutError(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <Drawer
@@ -44,7 +77,7 @@ const CartDrawer = ({
         <Stack direction="row" spacing={1.5} alignItems="center">
           <Typography variant="h5" fontWeight="700">Корзина</Typography>
           <Badge 
-            badgeContent={cartItems.length} 
+            badgeContent={items.reduce((acc, item) => acc + Number(item.quantity || 0), 0)} 
             color="primary" 
             sx={{ '& .MuiBadge-badge': { fontWeight: 600 } }} 
           />
@@ -58,7 +91,7 @@ const CartDrawer = ({
 
       {/* CONTENT */}
       <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
-        {cartItems.length === 0 ? (
+        {items.length === 0 ? (
           <Stack alignItems="center" justifyContent="center" sx={{ height: '100%', opacity: 0.6 }}>
             <ShoppingBagOutlinedIcon sx={{ fontSize: 80, mb: 2 }} />
             <Typography variant="h6">Ваша корзина пуста</Typography>
@@ -66,9 +99,9 @@ const CartDrawer = ({
           </Stack>
         ) : (
           <Stack spacing={3}>
-            {cartItems.map((item) => (
+            {items.map((item) => (
               <Box 
-                key={`${item.productId}-${item.warehouseId}`}
+                key={item.id}
                 sx={{ 
                   display: 'flex', 
                   gap: 2,
@@ -77,7 +110,7 @@ const CartDrawer = ({
                 }}
               >
                 <Avatar
-                  src={item.image}
+                  src={item.image || item.product_data?.images?.[0]}
                   variant="rounded"
                   sx={{ width: 80, height: 80, bgcolor: 'grey.100', borderRadius: 2 }}
                 />
@@ -106,7 +139,7 @@ const CartDrawer = ({
                     >
                       <IconButton 
                         size="small" 
-                        onClick={() => onUpdateQuantity(item.productId, item.warehouseId, item.quantity - 1)}
+                        onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
                         disabled={item.quantity <= 1}
                       >
                         <RemoveIcon fontSize="inherit" />
@@ -116,14 +149,14 @@ const CartDrawer = ({
                       </Typography>
                       <IconButton 
                         size="small"
-                        onClick={() => onUpdateQuantity(item.productId, item.warehouseId, item.quantity + 1)}
+                        onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                       >
                         <AddIcon fontSize="inherit" />
                       </IconButton>
                     </Stack>
                     
                     <Typography variant="subtitle1" fontWeight="700">
-                      {formatPrice(item.price * item.quantity)} ₽
+                      {formatPrice(Number(item.price) * item.quantity)} ₽
                     </Typography>
                   </Stack>
                 </Box>
@@ -131,7 +164,7 @@ const CartDrawer = ({
                 <IconButton 
                   color="error" 
                   size="small" 
-                  onClick={() => onRemoveItem(item.productId, item.warehouseId)}
+                  onClick={() => onRemoveItem(item.id)}
                   sx={{ alignSelf: 'flex-start', mt: -1 }}
                 >
                   <DeleteOutlineIcon fontSize="small" />
@@ -143,7 +176,7 @@ const CartDrawer = ({
       </Box>
 
       {/* FOOTER */}
-      {cartItems.length > 0 && (
+      {items.length > 0 && (
         <Box sx={{ p: 3, borderTop: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
           <Stack spacing={2}>
             <Stack direction="row" justifyContent="space-between">
@@ -152,6 +185,9 @@ const CartDrawer = ({
                 {formatPrice(getCartTotal())} ₽
               </Typography>
             </Stack>
+
+            {checkoutError && <Alert severity="error">{checkoutError}</Alert>}
+            {successMessage && <Alert severity="success">{successMessage}</Alert>}
             
             <Button
               variant="contained"
@@ -164,9 +200,10 @@ const CartDrawer = ({
                 fontWeight: 700,
                 boxShadow: `0 8px 16px ${alpha(theme.palette.primary.main, 0.3)}`
               }}
-              onClick={() => alert('Переход к оформлению...')}
+              onClick={handleCheckout}
+              disabled={isSubmitting}
             >
-              Оформить заказ
+              {isSubmitting ? <CircularProgress size={24} color="inherit" /> : 'Оформить заказ'}
             </Button>
             
             <Button

@@ -90,11 +90,13 @@ function Header({
   onUpdateQuantity,
   onClearCart,
   getCartTotal,
+  onOrderCreated,
   themeMode,
   onToggleTheme 
 }) {
   const navigate = useNavigate();
   const theme = useTheme();
+  const safeCartItems = Array.isArray(cartItems) ? cartItems : [];
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -113,7 +115,11 @@ function Header({
     };
 
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('auth-changed', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth-changed', handleStorageChange);
+    };
   }, []);
 
   const trigger = useScrollTrigger({ disableHysteresis: true, threshold: 20 });
@@ -248,7 +254,7 @@ function Header({
 
               <IconButton color="inherit" onClick={() => setIsCartOpen(true)}>
                 <Badge 
-                  badgeContent={cartItems.reduce((acc, i) => acc + i.quantity, 0)} 
+                  badgeContent={safeCartItems.reduce((acc, i) => acc + Number(i.quantity || 0), 0)} 
                   color="error"
                   sx={{ '& .MuiBadge-badge': { fontWeight: 700 } }}
                 >
@@ -309,11 +315,13 @@ function Header({
       <CartDrawer
         open={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        cartItems={cartItems}
+        cartItems={safeCartItems}
         onRemoveItem={onRemoveItem}
         onUpdateQuantity={onUpdateQuantity}
         onClearCart={onClearCart}
         getCartTotal={getCartTotal}
+        onNeedAuth={() => setIsAccountModalOpen(true)}
+        onOrderCreated={onOrderCreated}
       />
 
       {isAccountModalOpen && (
