@@ -45,7 +45,7 @@ const MainBody = ({ onExampleSearch }) => {
       </Box>
 
       {/* Features Grid */}
-      <Grid container spacing={4}>
+      <Grid container spacing={4} sx={{ display: 'flex', justifyContent: 'center' }}>
         {features.map((f, i) => (
           <Grid item xs={12} md={4} key={i}>
             <Paper 

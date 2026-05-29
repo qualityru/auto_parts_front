@@ -18,13 +18,14 @@ import {
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
-import DirectionsCarFilledIcon from '@mui/icons-material/DirectionsCarFilled';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import PhoneIcon from '@mui/icons-material/Phone';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import TabrosIcon from './TabrosIcon';
 
 // Импорт корзины и модалки аккаунта
 import CartDrawer from './CartModal';
@@ -196,12 +197,16 @@ function Header({
               }}
             >
               <Box sx={{ 
-                p: 1, 
-                bgcolor: alpha('#fff', 0.2), 
-                borderRadius: '12px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                width: 46,
+                height: 46,
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: alpha('#fff', 0.18), 
+                borderRadius: '14px',
+                border: `1px solid ${alpha('#fff', 0.2)}`,
+                boxShadow: '0 8px 22px rgba(0,0,0,0.14)'
               }}>
-                <DirectionsCarFilledIcon sx={{ fontSize: 28, color: '#fff' }} />
+                <TabrosIcon size={34} />
               </Box>
               <Typography
                 variant="h5"
@@ -211,9 +216,42 @@ function Header({
                 role="button"
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleHomeClick(); }}
               >
-                BOGTAR
+                TABROS
               </Typography>
             </Stack>
+
+            {/* PHONE NUMBER */}
+            <Box sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', mr: 2 }}>
+              <Tooltip title="Позвонить нам">
+                <Box 
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    px: 2,
+                    py: 1,
+                    bgcolor: alpha('#fff', 0.12),
+                    borderRadius: '12px',
+                    border: `1px solid ${alpha('#fff', 0.15)}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      bgcolor: alpha('#fff', 0.2),
+                      border: `1px solid ${alpha('#fff', 0.3)}`,
+                      boxShadow: `0 4px 12px ${alpha('#000', 0.15)}`
+                    }
+                  }}
+                  component="a"
+                  href="tel:+79000000000"
+                >
+                  <PhoneIcon sx={{ fontSize: 20, color: '#fff' }} />
+                  <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap', color: '#fff', textDecoration: 'none' }}>
+                    +7 (988) 347-47-06
+                  </Typography>
+                </Box>
+              </Tooltip>
+            </Box>
 
             {/* SEARCH BAR */}
             <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: { xs: 1, md: 2.5 } }}>

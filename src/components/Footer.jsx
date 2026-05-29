@@ -8,7 +8,7 @@ const Footer = () => {
         <Grid container spacing={4} justifyContent="space-between">
           <Grid item xs={12} md={4}>
             <Typography variant="h6" fontWeight="800" color="primary" gutterBottom>
-              BOGTAR
+              TABROS
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Ваш надежный партнер в мире автозапчастей. Мы предлагаем широкий ассортимент деталей для любых марок автомобилей.
@@ -33,7 +33,7 @@ const Footer = () => {
         </Grid>
         <Divider sx={{ my: 4 }} />
         <Typography variant="body2" color="text.secondary" align="center">
-          © {new Date().getFullYear()} BogTar. Все права защищены.
+          © {new Date().getFullYear()} tabros. Все права защищены.
         </Typography>
       </Container>
     </Box>
