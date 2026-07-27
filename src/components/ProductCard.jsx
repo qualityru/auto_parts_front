@@ -167,8 +167,25 @@ const getPriceValue = (value) => {
   return normalized && Number.isFinite(price) ? price : null;
 };
 
+const normalizeArticleForMatch = (value) => String(value ?? '')
+  .trim()
+  .toLocaleUpperCase('ru')
+  .replace(/[\s-]+/g, '');
+
+const isRequestedArticleWarehouse = (warehouse, searchQuery) => {
+  const requestedArticle = normalizeArticleForMatch(searchQuery);
+  if (!requestedArticle) return false;
+
+  return [
+    warehouse.sourceProduct?.article,
+    warehouse.article,
+    warehouse.supplier_article,
+  ].some((article) => normalizeArticleForMatch(article) === requestedArticle);
+};
+
 function ProductCard({
   product,
+  searchQuery,
   onAddToCart,
   isItemInCart,
   onOpenImageModal,
@@ -184,18 +201,23 @@ function ProductCard({
     [product.warehouses],
   );
   const sortedWarehouses = useMemo(() => [...warehouses].sort((left, right) => {
+    // Сначала предложения по искомому (оригинальному) артикулу, затем заменители по цене.
+    const exactMatchDifference = Number(isRequestedArticleWarehouse(right, searchQuery))
+      - Number(isRequestedArticleWarehouse(left, searchQuery));
+    if (exactMatchDifference) return exactMatchDifference;
+
     const leftPrice = getPriceValue(left.price);
     const rightPrice = getPriceValue(right.price);
     if (leftPrice === null && rightPrice === null) return 0;
     if (leftPrice === null) return 1;
     if (rightPrice === null) return -1;
     return leftPrice - rightPrice;
-  }), [warehouses]);
+  }), [warehouses, searchQuery]);
   const displayedWarehouses = sortedWarehouses.slice(0, visibleWarehouseCount);
   const validPrices = sortedWarehouses
     .map((warehouse) => getPriceValue(warehouse.price))
     .filter((price) => price !== null);
-  const minPrice = validPrices.length ? validPrices[0] : 0;
+  const minPrice = validPrices.length ? Math.min(...validPrices) : 0;
 
   useEffect(() => {
     setVisibleWarehouseCount((current) => Math.min(Math.max(3, current), sortedWarehouses.length));

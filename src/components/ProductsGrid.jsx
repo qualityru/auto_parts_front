@@ -97,6 +97,28 @@ const getPriceValue = (value) => {
   return Number.isFinite(price) ? price : null;
 };
 
+// Артикулы поставщиков могут отличаться только разделителями: 123-45, 123 45 и 12345.
+// Такие варианты считаются одним точным совпадением для приоритета выдачи.
+const normalizeArticleForMatch = (value) => String(value ?? '')
+  .trim()
+  .toLocaleUpperCase('ru')
+  .replace(/[\s-]+/g, '');
+
+const isExactArticleMatch = (product, searchQuery) => {
+  const requestedArticle = normalizeArticleForMatch(searchQuery);
+  if (!requestedArticle) return false;
+
+  const productArticles = [
+    product.article,
+    ...(Array.isArray(product.articles) ? product.articles : []),
+    ...(Array.isArray(product.warehouses)
+      ? product.warehouses.map((warehouse) => warehouse.sourceProduct?.article)
+      : []),
+  ];
+
+  return productArticles.some((article) => normalizeArticleForMatch(article) === requestedArticle);
+};
+
 const getNameGroup = (product) => {
   const label = String(product.name ?? '').trim().replace(/\s+/g, ' ') || 'Без названия';
   return {
@@ -263,6 +285,12 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
     });
 
     const sorted = [...filtered].sort((a, b) => {
+      // Оригинал, точно соответствующий запросу, всегда показываем раньше заменителей.
+      // Только внутри каждой из этих групп применяется выбранная сортировка.
+      const exactMatchDifference = Number(isExactArticleMatch(b.product, searchQuery))
+        - Number(isExactArticleMatch(a.product, searchQuery));
+      if (exactMatchDifference) return exactMatchDifference;
+
       switch (sortBy) {
         case 'priceDesc':
           if (a.metrics.minPrice === null) return 1;
@@ -296,6 +324,7 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
     normalizedDeliveryRange,
     sortBy,
     isAllSuppliersMode,
+    searchQuery,
   ]);
 
   return (
@@ -467,6 +496,7 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
           <Box key={product.internalId} sx={{ display: 'flex', justifyContent: 'center' }}>
             <ProductCard
               product={product}
+              searchQuery={searchQuery}
               onAddToCart={onAddToCart}
               isItemInCart={isItemInCart}
             />
