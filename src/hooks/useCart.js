@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   addCartItem,
   clearCartApi,
@@ -34,6 +34,7 @@ export function useCart() {
   const [cart, setCart] = useState(() => normalizeCart({ items: [] }));
   const [isCartLoading, setIsCartLoading] = useState(false);
   const [cartError, setCartError] = useState(null);
+  const removingItemIds = useRef(new Set());
 
   const refreshCart = useCallback(async () => {
     ensureGuestCartId();
@@ -71,6 +72,7 @@ export function useCart() {
 
   const addToCart = async (product, warehouse) => {
     ensureGuestCartId();
+    const { sourceProduct, ...warehouseData } = warehouse;
     const payload = {
       product_id: String(product.internalId || product.id || `${product.brand}-${product.article}`),
       warehouse_id: String(warehouse.id),
@@ -85,7 +87,7 @@ export function useCart() {
       return_type: String(getReturnType(warehouse)),
       fail_percent: Number(warehouse.supplier_info?.original_data?.fail_percent || 0),
       product_data: product,
-      warehouse_data: warehouse,
+      warehouse_data: warehouseData,
     };
     setCartError(null);
     const data = await addCartItem(payload);
@@ -93,8 +95,24 @@ export function useCart() {
   };
 
   const removeFromCart = async (itemId) => {
-    const data = await removeCartItem(itemId);
-    setCart(normalizeCart(data));
+    const normalizedItemId = String(itemId);
+    if (!itemId || removingItemIds.current.has(normalizedItemId)) return;
+
+    removingItemIds.current.add(normalizedItemId);
+    setCartError(null);
+    try {
+      const data = await removeCartItem(itemId);
+      setCart(normalizeCart(data));
+    } catch (error) {
+      if (error.status === 404) {
+        // Позиция уже удалена или корзина успела синхронизироваться в другом окне.
+        await refreshCart();
+        return;
+      }
+      setCartError(error.message);
+    } finally {
+      removingItemIds.current.delete(normalizedItemId);
+    }
   };
 
   const updateQuantity = async (itemId, quantity) => {

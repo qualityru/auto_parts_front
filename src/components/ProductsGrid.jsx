@@ -16,12 +16,6 @@ import {
 } from '@mui/material';
 import ProductCard from './ProductCard';
 
-const getIsCross = (product) => (
-  product.is_cross === true
-  || product.metadata?.is_cross === true
-  || product.metadata?.original_data?.is_cross === 1
-);
-
 const getReturnInfo = (warehouse) => {
   const info = warehouse.supplier_info?.original_data || {};
   const returnType = info.return_type || {};
@@ -88,6 +82,29 @@ const getWarehouseSupplierName = (warehouse) => {
   return candidates.find((value) => typeof value === 'string' && value.trim()) || null;
 };
 
+const getPriceValue = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(',', '.')
+    .replace(/[^\d.-]/g, '');
+  if (!normalized) return null;
+
+  const price = Number(normalized);
+  return Number.isFinite(price) ? price : null;
+};
+
+const getNameGroup = (product) => {
+  const label = String(product.name ?? '').trim().replace(/\s+/g, ' ') || 'Без названия';
+  return {
+    key: product.groupKey || (label === 'Без названия' ? '__unnamed_product__' : label.toLocaleLowerCase('ru')),
+    label,
+  };
+};
+
 const getProductMetrics = (product) => {
   const warehouses = Array.isArray(product.warehouses) ? product.warehouses : [];
   const suppliers = new Set();
@@ -102,9 +119,10 @@ const getProductMetrics = (product) => {
 
   const supplierList = suppliers.size > 0 ? [...suppliers] : ['Без поставщика'];
 
-  const minPrice = warehouses.length
-    ? Math.min(...warehouses.map((w) => Number(w.price) || 0))
-    : 0;
+  const prices = warehouses
+    .map((warehouse) => getPriceValue(warehouse.price))
+    .filter((price) => price !== null);
+  const minPrice = prices.length ? Math.min(...prices) : null;
 
   const minDelivery = warehouses.length
     ? Math.min(...warehouses.map((w) => getDeliveryMetric(w)))
@@ -115,7 +133,6 @@ const getProductMetrics = (product) => {
   return {
     suppliers: supplierList,
     primarySupplier: supplierList[0],
-    isCross: getIsCross(product),
     minPrice,
     minDelivery,
     hasReturn,
@@ -144,8 +161,23 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
     [suppliers],
   );
 
+  const nameGroups = useMemo(() => {
+    const groups = new Map();
+    preparedProducts.forEach(({ product }) => {
+      const group = getNameGroup(product);
+      const existing = groups.get(group.key);
+      groups.set(group.key, {
+        ...group,
+        count: (existing?.count || 0) + (product.groupItemCount || 1),
+      });
+    });
+    return [...groups.values()].sort((a, b) => (
+      b.count - a.count || a.label.localeCompare(b.label, 'ru')
+    ));
+  }, [preparedProducts]);
+
   const maxPrice = useMemo(
-    () => Math.max(1, ...preparedProducts.map((item) => item.metrics.minPrice)),
+    () => Math.max(1, ...preparedProducts.map((item) => item.metrics.minPrice ?? 0)),
     [preparedProducts],
   );
 
@@ -155,22 +187,24 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
   );
 
   const [selectedSuppliers, setSelectedSuppliers] = useState([]);
+  const [hiddenNameGroups, setHiddenNameGroups] = useState([]);
   const [isAllSuppliersMode, setIsAllSuppliersMode] = useState(true);
-  const [originFilter, setOriginFilter] = useState('all');
   const [returnFilter, setReturnFilter] = useState('all');
   const [priceRange, setPriceRange] = useState([0, maxPrice]);
   const [deliveryRange, setDeliveryRange] = useState([0, maxDelivery]);
-  const [sortBy, setSortBy] = useState('origin');
-  const allSuppliersSelected = isAllSuppliersMode
-    || (supplierNames.length > 0 && selectedSuppliers.length === supplierNames.length);
-  const someSuppliersSelected = !allSuppliersSelected && selectedSuppliers.length > 0;
+  const [sortBy, setSortBy] = useState('priceAsc');
+  const selectedNameGroupKeys = nameGroups
+    .filter((group) => !hiddenNameGroups.includes(group.key))
+    .map((group) => group.key);
+  const allNameGroupsSelected = nameGroups.length > 0 && selectedNameGroupKeys.length === nameGroups.length;
+  const someNameGroupsSelected = !allNameGroupsSelected && selectedNameGroupKeys.length > 0;
 
   const resetFilters = () => {
     setIsAllSuppliersMode(true);
     setSelectedSuppliers(supplierNames);
-    setOriginFilter('all');
+    setHiddenNameGroups([]);
     setReturnFilter('all');
-    setSortBy('origin');
+    setSortBy('priceAsc');
     setPriceRange([0, maxPrice]);
     setDeliveryRange([0, maxDelivery]);
   };
@@ -187,6 +221,10 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
     }
     setSelectedSuppliers((prev) => prev.filter((supplier) => supplierNames.includes(supplier)));
   }, [supplierNames, isAllSuppliersMode]);
+
+  useEffect(() => {
+    setHiddenNameGroups([]);
+  }, [searchQuery]);
 
   useEffect(() => {
     setPriceRange((prev) => [Math.min(prev[0], maxPrice), maxPrice]);
@@ -207,28 +245,28 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
   );
 
   const filteredAndSorted = useMemo(() => {
-    const filtered = preparedProducts.filter(({ metrics }) => {
+    const filtered = preparedProducts.filter(({ product, metrics }) => {
+      const nameMatch = !hiddenNameGroups.includes(getNameGroup(product).key);
       const supplierMatch = isAllSuppliersMode
         || selectedSuppliers.length === 0
         || selectedSuppliers.some((supplier) => metrics.suppliers.includes(supplier));
-
-      const originMatch = originFilter === 'all'
-        || (originFilter === 'original' && !metrics.isCross)
-        || (originFilter === 'analog' && metrics.isCross);
 
       const returnMatch = returnFilter === 'all'
         || (returnFilter === 'possible' && metrics.hasReturn)
         || (returnFilter === 'not_possible' && !metrics.hasReturn);
 
-      const priceMatch = metrics.minPrice >= normalizedPriceRange[0] && metrics.minPrice <= normalizedPriceRange[1];
+      const priceMatch = metrics.minPrice === null
+        || (metrics.minPrice >= normalizedPriceRange[0] && metrics.minPrice <= normalizedPriceRange[1]);
       const deliveryMatch = metrics.minDelivery >= normalizedDeliveryRange[0] && metrics.minDelivery <= normalizedDeliveryRange[1];
 
-      return supplierMatch && originMatch && returnMatch && priceMatch && deliveryMatch;
+      return nameMatch && supplierMatch && returnMatch && priceMatch && deliveryMatch;
     });
 
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case 'priceDesc':
+          if (a.metrics.minPrice === null) return 1;
+          if (b.metrics.minPrice === null) return -1;
           return b.metrics.minPrice - a.metrics.minPrice;
         case 'deliveryAsc':
           return a.metrics.minDelivery - b.metrics.minDelivery;
@@ -238,12 +276,12 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
           return a.metrics.primarySupplier.localeCompare(b.metrics.primarySupplier, 'ru');
         case 'supplierDesc':
           return b.metrics.primarySupplier.localeCompare(a.metrics.primarySupplier, 'ru');
-        case 'origin':
-          return Number(a.metrics.isCross) - Number(b.metrics.isCross);
         case 'return':
           return Number(b.metrics.hasReturn) - Number(a.metrics.hasReturn);
         case 'priceAsc':
         default:
+          if (a.metrics.minPrice === null) return 1;
+          if (b.metrics.minPrice === null) return -1;
           return a.metrics.minPrice - b.metrics.minPrice;
       }
     });
@@ -252,7 +290,7 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
   }, [
     preparedProducts,
     selectedSuppliers,
-    originFilter,
+    hiddenNameGroups,
     returnFilter,
     normalizedPriceRange,
     normalizedDeliveryRange,
@@ -281,58 +319,47 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
             gridTemplateColumns: {
               xs: '1fr',
               sm: '1fr 1fr',
-              md: 'minmax(220px, 2fr) minmax(180px, 1.1fr) minmax(140px, 0.9fr) minmax(140px, 0.9fr) minmax(170px, 1.1fr) minmax(170px, 1.1fr) auto',
+              md: 'minmax(180px, 1.1fr) minmax(180px, 1.1fr) minmax(140px, 0.9fr) minmax(170px, 1.1fr) minmax(170px, 1.1fr) auto',
             },
           }}
         >
           <FormControl size="small" sx={{ minWidth: 0 }}>
-            <InputLabel id="supplier-filter-label">Поставщики</InputLabel>
+            <InputLabel id="name-filter-label">Наименование</InputLabel>
             <Select
-              labelId="supplier-filter-label"
+              labelId="name-filter-label"
               multiple
-              value={selectedSuppliers}
-              onChange={(e) => {
-                const nextValue = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
-                if (nextValue.includes('__all_suppliers__')) {
-                  if (allSuppliersSelected) {
-                    setIsAllSuppliersMode(false);
-                    setSelectedSuppliers([]);
-                  } else {
-                    setIsAllSuppliersMode(true);
-                    setSelectedSuppliers(supplierNames);
-                  }
+              value={selectedNameGroupKeys}
+              onChange={(event) => {
+                const selected = typeof event.target.value === 'string'
+                  ? event.target.value.split(',')
+                  : event.target.value;
+                if (selected.includes('__all_name_groups__')) {
+                  setHiddenNameGroups(allNameGroupsSelected ? nameGroups.map((group) => group.key) : []);
                   return;
                 }
-                const cleaned = nextValue.filter((value) => value !== '__all_suppliers__');
-                if (cleaned.length === 0 || cleaned.length === supplierNames.length) {
-                  setIsAllSuppliersMode(true);
-                  setSelectedSuppliers(supplierNames);
-                  return;
-                }
-                setIsAllSuppliersMode(false);
-                setSelectedSuppliers(cleaned);
+                setHiddenNameGroups(nameGroups
+                  .map((group) => group.key)
+                  .filter((key) => !selected.includes(key)));
               }}
-              input={<OutlinedInput label="Поставщики" />}
-              renderValue={(selected) => {
-                if (selected.length === 0 || allSuppliersSelected) return 'Все поставщики';
-                if (selected.length <= 2) return selected.join(', ');
-                return `${selected.slice(0, 2).join(', ')} +${selected.length - 2}`;
-              }}
-              MenuProps={{ PaperProps: { sx: { maxHeight: 360, minWidth: 380 } } }}
-              sx={{ '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}
+              input={<OutlinedInput label="Наименование" />}
+              renderValue={(selected) => selected.length === nameGroups.length ? 'Все наименования' : `Выбрано: ${selected.length}`}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 360, minWidth: 340 } } }}
             >
-              <MenuItem value="__all_suppliers__">
+              <MenuItem value="__all_name_groups__">
                 <Checkbox
                   size="small"
-                  checked={allSuppliersSelected}
-                  indeterminate={someSuppliersSelected}
+                  checked={allNameGroupsSelected}
+                  indeterminate={someNameGroupsSelected}
                 />
-                <ListItemText primary="Все поставщики" secondary={`Всего: ${suppliers.length}`} />
+                <ListItemText primary="Все наименования" secondary={`Всего: ${nameGroups.length}`} />
               </MenuItem>
-              {suppliers.map(({ name, count }) => (
-                <MenuItem key={name} value={name}>
-                  <Checkbox size="small" checked={selectedSuppliers.includes(name)} />
-                  <ListItemText primary={name} secondary={`Товаров: ${count}`} />
+              {nameGroups.map(({ key, label, count }) => (
+                <MenuItem
+                  key={key}
+                  value={key}
+                >
+                  <Checkbox size="small" checked={!hiddenNameGroups.includes(key)} />
+                  <ListItemText primary={label} secondary={`Товаров: ${count}`} />
                 </MenuItem>
               ))}
             </Select>
@@ -351,9 +378,6 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
                   priceDesc: 'Цена: по убыванию',
                   deliveryAsc: 'Срок: быстрее',
                   deliveryDesc: 'Срок: дольше',
-                  supplierAsc: 'Поставщик: А-Я',
-                  supplierDesc: 'Поставщик: Я-А',
-                  origin: 'Сначала оригинал',
                   return: 'Сначала с возвратом',
                 };
                 return labels[value] || 'Сортировка';
@@ -363,24 +387,7 @@ const ProductsGrid = ({ products, searchQuery, onAddToCart, isItemInCart }) => {
               <MenuItem value="priceDesc">Цена: по убыванию</MenuItem>
               <MenuItem value="deliveryAsc">Срок: быстрее</MenuItem>
               <MenuItem value="deliveryDesc">Срок: дольше</MenuItem>
-              <MenuItem value="supplierAsc">Поставщик: А-Я</MenuItem>
-              <MenuItem value="supplierDesc">Поставщик: Я-А</MenuItem>
-              <MenuItem value="origin">Сначала оригинал</MenuItem>
               <MenuItem value="return">Сначала с возвратом</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 0, '& .MuiSelect-select': { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } }}>
-            <InputLabel id="origin-filter-label">Тип детали</InputLabel>
-            <Select
-              labelId="origin-filter-label"
-              value={originFilter}
-              label="Тип детали"
-              onChange={(e) => setOriginFilter(e.target.value)}
-            >
-              <MenuItem value="all">Все типы</MenuItem>
-              <MenuItem value="original">Оригинал</MenuItem>
-              <MenuItem value="analog">Аналог</MenuItem>
             </Select>
           </FormControl>
 

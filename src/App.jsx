@@ -37,6 +37,51 @@ const renderSafeText = (value) => {
 
 const normalizeArticle = (value) => String(value ?? '').trim();
 
+const normalizeProductName = (value) => {
+  const name = String(value ?? '').trim().replace(/\s+/g, ' ');
+  return name ? name.toLocaleLowerCase('ru') : '__unnamed_product__';
+};
+
+const getProductNameTokens = (value) => [...new Set(
+  normalizeProductName(value)
+    .replace(/ё/g, 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(' ')
+    .filter((token) => token.length > 1 && !['для', 'и', 'или', 'на', 'в'].includes(token)),
+)];
+
+const areProductNamesSimilar = (leftName, rightName) => {
+  const leftTokens = getProductNameTokens(leftName);
+  const rightTokens = getProductNameTokens(rightName);
+  if (leftTokens.length === 0 || rightTokens.length === 0) return false;
+
+  const rightSet = new Set(rightTokens);
+  const commonCount = leftTokens.filter((token) => rightSet.has(token)).length;
+  const smallerCount = Math.min(leftTokens.length, rightTokens.length);
+  const unionCount = new Set([...leftTokens, ...rightTokens]).size;
+
+  return commonCount >= 2
+    && (commonCount === smallerCount || commonCount / unionCount >= 0.6);
+};
+
+const getProductNameLabel = (value) => {
+  const name = String(value ?? '').trim().replace(/\s+/g, ' ');
+  return name || 'Без названия';
+};
+
+const attachProductToWarehouses = (item) => {
+  const sourceProduct = {
+    ...item,
+    internalId: String(item.id || `${item.brand || ''}-${item.article || ''}`),
+    images: item.images || [],
+  };
+
+  return (item.warehouses || []).map((warehouse) => ({
+    ...warehouse,
+    sourceProduct,
+  }));
+};
+
 const mergeImages = (prevImages = [], nextImages = []) => {
   const all = [...prevImages, ...nextImages];
   const unique = [];
@@ -472,21 +517,52 @@ function App({ searchType }) {
               stopWithMinDelay(setIsArticleSearching);
             }
             setProducts(prev => {
-              const groupKey = `${renderSafeText(item.brand)}-${renderSafeText(item.article)}`.toLowerCase().replace(/\s+/g, '');
-              if (prev.find(p => p.groupKey === groupKey)) return prev;
-              return [...prev, { 
+              const groupKey = normalizeProductName(item.name);
+              const existingGroup = prev.find((product) => (
+                product.groupKey === groupKey || areProductNamesSimilar(product.name, item.name)
+              ));
+              if (existingGroup) {
+                const warehouses = [...(existingGroup.warehouses || []), ...attachProductToWarehouses(item)];
+                return prev.map((product) => product.groupKey === groupKey ? {
+                  ...product,
+                  warehouses,
+                  images: mergeImages(product.images, item.images),
+                  articles: [...new Set([...(product.articles || [product.article]), item.article])],
+                  groupItemCount: (product.groupItemCount || 1) + 1,
+                } : product);
+              }
+              return [...prev, {
                 ...item, 
-                internalId: groupKey, 
-                groupKey, 
-                warehouses: item.warehouses || [], 
+                name: getProductNameLabel(item.name),
+                internalId: `name-${groupKey}`,
+                groupKey,
+                groupItemCount: 1,
+                articles: [item.article],
+                warehouses: attachProductToWarehouses(item),
                 images: item.images || [] 
               }];
             });
           },
           onImages: (imageData) => {
             setProducts(prev => prev.map(p => {
-              if (normalizeArticle(p.article) === normalizeArticle(imageData.article)) {
-                return { ...p, images: mergeImages(p.images, imageData.images) };
+              if ((p.articles || [p.article]).some((article) => (
+                normalizeArticle(article) === normalizeArticle(imageData.article)
+              ))) {
+                return {
+                  ...p,
+                  images: mergeImages(p.images, imageData.images),
+                  warehouses: (p.warehouses || []).map((warehouse) => (
+                    normalizeArticle(warehouse.sourceProduct?.article) === normalizeArticle(imageData.article)
+                      ? {
+                        ...warehouse,
+                        sourceProduct: {
+                          ...warehouse.sourceProduct,
+                          images: mergeImages(warehouse.sourceProduct?.images, imageData.images),
+                        },
+                      }
+                      : warehouse
+                  )),
+                };
               }
               return p;
             }));

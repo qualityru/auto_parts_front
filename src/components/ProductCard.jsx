@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
+  Collapse,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -17,15 +17,12 @@ import {
 } from '@mui/material';
 import {
   AssignmentReturnOutlined,
-  BusinessCenterOutlined,
   CheckOutlined,
   ChevronLeftOutlined,
   ChevronRightOutlined,
   CloseOutlined,
-  ImageNotSupportedOutlined,
   LocalShippingOutlined,
   ShoppingCartOutlined,
-  ZoomInOutlined,
 } from '@mui/icons-material';
 import Zoom from 'react-medium-image-zoom';
 import 'react-medium-image-zoom/dist/styles.css';
@@ -33,7 +30,7 @@ import 'react-medium-image-zoom/dist/styles.css';
 const StyledCard = styled(Card)(({ theme }) => ({
   width: '100%',
   maxWidth: 380,
-  minHeight: 620,
+  height: 620,
   display: 'flex',
   flexDirection: 'column',
   borderRadius: 20,
@@ -54,26 +51,9 @@ const StyledCard = styled(Card)(({ theme }) => ({
   },
 }));
 
-const GalleryContainer = styled(Box)(({ theme }) => ({
-  height: 210,
-  width: '100%',
-  position: 'relative',
-  overflow: 'hidden',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  cursor: 'zoom-in',
-  backgroundColor: '#fff',
-  '& img': {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    padding: 14,
-  },
-}));
-
 const WarehouseZone = styled(Box)(({ theme }) => ({
-  maxHeight: 218,
+  flexGrow: 1,
+  minHeight: 0,
   overflowY: 'auto',
   paddingRight: 4,
   '&::-webkit-scrollbar': { width: 5 },
@@ -179,6 +159,14 @@ const getMultiplicityInfo = (warehouse) => {
   return `кратно ${value}${measure ? ` ${measure}` : ''}`;
 };
 
+const getPriceValue = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\s+/g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+  const price = Number(normalized);
+  return normalized && Number.isFinite(price) ? price : null;
+};
+
 function ProductCard({
   product,
   onAddToCart,
@@ -186,193 +174,84 @@ function ProductCard({
   onOpenImageModal,
 }) {
   const theme = useTheme();
-  const [showAll, setShowAll] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [visibleWarehouseCount, setVisibleWarehouseCount] = useState(3);
+  const [imageViewer, setImageViewer] = useState(null);
+  const warehouseScrollRef = useRef(null);
+  const warehousesLoadMoreRef = useRef(null);
 
   const warehouses = useMemo(
     () => (Array.isArray(product.warehouses) ? product.warehouses : []),
     [product.warehouses],
   );
-  const displayedWarehouses = showAll ? warehouses : warehouses.slice(0, 3);
-  const validImages = useMemo(
-    () => (product.images || []).filter((img) => typeof img === 'string' && img.trim() !== ''),
-    [product.images],
-  );
+  const sortedWarehouses = useMemo(() => [...warehouses].sort((left, right) => {
+    const leftPrice = getPriceValue(left.price);
+    const rightPrice = getPriceValue(right.price);
+    if (leftPrice === null && rightPrice === null) return 0;
+    if (leftPrice === null) return 1;
+    if (rightPrice === null) return -1;
+    return leftPrice - rightPrice;
+  }), [warehouses]);
+  const displayedWarehouses = sortedWarehouses.slice(0, visibleWarehouseCount);
+  const validPrices = sortedWarehouses
+    .map((warehouse) => getPriceValue(warehouse.price))
+    .filter((price) => price !== null);
+  const minPrice = validPrices.length ? validPrices[0] : 0;
 
-  const minPrice = warehouses.length > 0
-    ? Math.min(...warehouses.map((w) => Number(w.price) || 0))
-    : 0;
+  useEffect(() => {
+    setVisibleWarehouseCount((current) => Math.min(Math.max(3, current), sortedWarehouses.length));
+  }, [sortedWarehouses.length]);
 
-  const isCross = product.is_cross === true
-    || product.metadata?.is_cross === true
-    || product.metadata?.original_data?.is_cross === 1;
+  useEffect(() => {
+    const target = warehousesLoadMoreRef.current;
+    const scrollRoot = warehouseScrollRef.current;
+    if (!target || !scrollRoot || visibleWarehouseCount >= sortedWarehouses.length) return undefined;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisibleWarehouseCount((current) => Math.min(current + 10, sortedWarehouses.length));
+      }
+    }, { root: scrollRoot, rootMargin: '0px 0px 120px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [visibleWarehouseCount, sortedWarehouses.length]);
 
   const formatPrice = (price) => new Intl.NumberFormat('ru-RU', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Number(price) || 0);
 
-  useEffect(() => {
-    if (validImages.length === 0) {
-      setCurrentImageIndex(0);
-      return;
-    }
-    if (currentImageIndex > validImages.length - 1) {
-      setCurrentImageIndex(validImages.length - 1);
-    }
-  }, [validImages, currentImageIndex]);
-
-  const openImageModal = () => {
+  const openImageModal = (images, imageProduct, initialIndex = 0) => {
+    const validImages = (images || []).filter((image) => typeof image === 'string' && image.trim());
     if (validImages.length === 0) return;
     if (typeof onOpenImageModal === 'function') {
       onOpenImageModal({
-        product,
+        product: imageProduct,
         images: validImages,
-        initialIndex: currentImageIndex,
+        initialIndex,
       });
       return;
     }
-    setIsImageModalOpen(true);
+    setImageViewer({ product: imageProduct, images: validImages, index: initialIndex });
   };
 
-  const showPrevImage = (event) => {
-    if (event) event.stopPropagation();
-    if (validImages.length < 2) return;
-    setCurrentImageIndex((prev) => (prev - 1 + validImages.length) % validImages.length);
+  const showPreviousViewerImage = () => {
+    setImageViewer((viewer) => viewer && ({
+      ...viewer,
+      index: (viewer.index - 1 + viewer.images.length) % viewer.images.length,
+    }));
   };
 
-  const showNextImage = (event) => {
-    if (event) event.stopPropagation();
-    if (validImages.length < 2) return;
-    setCurrentImageIndex((prev) => (prev + 1) % validImages.length);
+  const showNextViewerImage = () => {
+    setImageViewer((viewer) => viewer && ({
+      ...viewer,
+      index: (viewer.index + 1) % viewer.images.length,
+    }));
   };
 
   return (
     <>
       <StyledCard>
-        <GalleryContainer onClick={openImageModal}>
-          {validImages.length > 0 ? (
-            <>
-              <img src={validImages[currentImageIndex]} alt={product.name} />
-              {validImages.length > 1 && (
-                <>
-                  <IconButton
-                    size="small"
-                    onClick={showPrevImage}
-                    aria-label="Предыдущее фото"
-                    sx={{
-                      position: 'absolute',
-                      left: 8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      bgcolor: 'rgba(8, 16, 28, 0.56)',
-                      color: '#fff',
-                      '&:hover': { bgcolor: 'rgba(8, 16, 28, 0.72)' },
-                    }}
-                  >
-                    <ChevronLeftOutlined fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={showNextImage}
-                    aria-label="Следующее фото"
-                    sx={{
-                      position: 'absolute',
-                      right: 8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      bgcolor: 'rgba(8, 16, 28, 0.56)',
-                      color: '#fff',
-                      '&:hover': { bgcolor: 'rgba(8, 16, 28, 0.72)' },
-                    }}
-                  >
-                    <ChevronRightOutlined fontSize="small" />
-                  </IconButton>
-                </>
-              )}
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: 10,
-                  top: 10,
-                  px: 1,
-                  py: 0.4,
-                  borderRadius: 2,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: '#fff',
-                  bgcolor: 'rgba(8, 16, 28, 0.62)',
-                }}
-              >
-                {currentImageIndex + 1}/{validImages.length}
-              </Box>
-              <IconButton
-                size="small"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openImageModal();
-                }}
-                aria-label="Увеличить фото"
-                sx={{
-                  position: 'absolute',
-                  right: 10,
-                  bottom: 10,
-                  bgcolor: 'rgba(8, 16, 28, 0.56)',
-                  color: '#fff',
-                  '&:hover': { bgcolor: 'rgba(8, 16, 28, 0.72)' },
-                }}
-              >
-                <ZoomInOutlined fontSize="small" />
-              </IconButton>
-            </>
-          ) : (
-            <Stack color="text.secondary" alignItems="center" spacing={1}>
-              <ImageNotSupportedOutlined fontSize="large" />
-              <Typography variant="caption">Фото скоро загрузится</Typography>
-            </Stack>
-          )}
-        </GalleryContainer>
-
-        <CardContent sx={{ p: 2, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.2 }}>
-            <Chip
-              icon={<BusinessCenterOutlined sx={{ fontSize: 14 }} />}
-              label={product.supplier || 'Поставщик'}
-              size="small"
-              variant="filled"
-              sx={{
-                height: 24,
-                fontSize: 11,
-                borderRadius: 1.5,
-                bgcolor: theme.palette.mode === 'light' ? '#e9f3ff' : '#1f3042',
-              }}
-            />
-            <Chip
-              label={isCross ? 'АНАЛОГ' : 'ОРИГИНАЛ'}
-              size="small"
-              sx={{
-                height: 24,
-                borderRadius: 1.5,
-                fontSize: 11,
-                fontWeight: 800,
-                color: isCross ? '#9a5200' : '#0e5f40',
-                bgcolor: isCross ? '#ffe7ca' : '#dff5ea',
-              }}
-            />
-          </Stack>
-
-          <Typography
-            variant="overline"
-            sx={{
-              fontWeight: 800,
-              color: 'primary.main',
-              lineHeight: 1.2,
-              letterSpacing: '.06em',
-            }}
-          >
-            {product.brand || 'NO BRAND'} · {product.article || '---'}
-          </Typography>
+        <CardContent sx={{ p: 2, display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0 }}>
           <Typography
             variant="subtitle1"
             sx={{
@@ -427,30 +306,39 @@ function ProductCard({
 
           <Divider sx={{ mb: 1.2 }} />
 
-          <WarehouseZone>
+          <WarehouseZone ref={warehouseScrollRef}>
             <Stack spacing={1}>
-              {displayedWarehouses.map((warehouse) => {
-                const inCart = isItemInCart(product.internalId || product.id, warehouse.id);
+              {displayedWarehouses.map((warehouse, index) => {
+                const cartProduct = warehouse.sourceProduct || product;
+                const inCart = isItemInCart(cartProduct.internalId || cartProduct.id, warehouse.id);
                 const hasQuantity = Number(warehouse.quantity) > 0 || warehouse.is_available === true;
                 const returnInfo = getReturnInfo(warehouse);
                 const multiplicityLabel = getMultiplicityInfo(warehouse);
+                const sourceImages = (cartProduct.images || []).filter((image) => (
+                  typeof image === 'string' && image.trim()
+                ));
 
                 return (
-                  <Box
-                    key={warehouse.id}
-                    sx={{
-                      p: 1.2,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      bgcolor: theme.palette.mode === 'light' ? '#fff' : '#162334',
-                    }}
+                  <Collapse
+                    key={`${warehouse.id || 'warehouse'}-${index}`}
+                    in
+                    timeout={220}
                   >
-                    <Stack direction="row" justifyContent="space-between" spacing={1}>
+                    <Box
+                      sx={{
+                        p: 1.2,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        bgcolor: theme.palette.mode === 'light' ? '#fff' : '#162334',
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" spacing={1}>
                       <Box sx={{ minWidth: 0 }}>
                         <Typography
                           variant="caption"
                           sx={{
+                            minWidth: 0,
                             fontWeight: 700,
                             display: 'block',
                             mb: 0.3,
@@ -494,72 +382,102 @@ function ProductCard({
                         )}
                       </Box>
 
-                      <Stack direction="row" spacing={0.8} alignItems="center">
-                        <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                          {formatPrice(warehouse.price)} ₽
-                        </Typography>
-                        <IconButton
-                          size="small"
-                          color={inCart ? 'success' : 'primary'}
-                          disabled={!hasQuantity}
-                          onClick={() => onAddToCart(product, warehouse)}
-                          sx={{
-                            borderRadius: 2,
-                            border: '1.5px solid',
-                            borderColor: inCart ? 'success.main' : theme.palette.primary.light,
-                          }}
-                        >
-                          {inCart ? <CheckOutlined fontSize="small" /> : <ShoppingCartOutlined fontSize="small" />}
-                        </IconButton>
+                      <Stack
+                        spacing={0.35}
+                        alignItems="flex-end"
+                        justifyContent="flex-start"
+                        flexShrink={0}
+                        alignSelf="stretch"
+                      >
+                        {(cartProduct.brand || cartProduct.article) && (
+                          <Stack alignItems="flex-end" spacing={0.1} sx={{ maxWidth: 145 }}>
+                            {cartProduct.brand && (
+                              <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: '100%', fontSize: 10, lineHeight: 1 }}>
+                                {cartProduct.brand}
+                              </Typography>
+                            )}
+                            {cartProduct.article && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontSize: 10, lineHeight: 1.1, textAlign: 'right', overflowWrap: 'anywhere' }}
+                              >
+                                Арт. {cartProduct.article}
+                              </Typography>
+                            )}
+                          </Stack>
+                        )}
+                        <Stack direction="row" spacing={0.6} alignItems="flex-end">
+                          {sourceImages.length > 0 && (
+                            <Box
+                              component="button"
+                              type="button"
+                              onClick={() => openImageModal(sourceImages, cartProduct)}
+                              aria-label={`Открыть фотографии товара ${cartProduct.article || ''}`}
+                              sx={{
+                                position: 'relative', flexShrink: 0, p: 0, width: 38, height: 38,
+                                border: '1px solid', borderColor: 'divider', borderRadius: 1.25,
+                                overflow: 'hidden', cursor: 'zoom-in', background: 'background.paper',
+                              }}
+                            >
+                              <Box component="img" src={sourceImages[0]} alt={cartProduct.name || cartProduct.article || 'Фото товара'} sx={{ width: '100%', height: '100%', objectFit: 'contain', p: 0.25 }} />
+                              {sourceImages.length > 1 && (
+                                <Box sx={{ position: 'absolute', right: 1, bottom: 1, px: 0.35, borderRadius: 0.75, bgcolor: 'rgba(0, 0, 0, 0.65)', color: '#fff', fontSize: 9, fontWeight: 800 }}>
+                                  {sourceImages.length}
+                                </Box>
+                              )}
+                            </Box>
+                          )}
+                          <Stack spacing={0.25} alignItems="flex-end">
+                            <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1 }}>
+                              {formatPrice(warehouse.price)} ₽
+                            </Typography>
+                            <IconButton
+                              size="small"
+                              color={inCart ? 'success' : 'primary'}
+                              disabled={!hasQuantity}
+                              onClick={() => onAddToCart(cartProduct, warehouse)}
+                              sx={{ borderRadius: 2, border: '1.5px solid', borderColor: inCart ? 'success.main' : theme.palette.primary.light }}
+                            >
+                              {inCart ? <CheckOutlined fontSize="small" /> : <ShoppingCartOutlined fontSize="small" />}
+                            </IconButton>
+                          </Stack>
+                        </Stack>
                       </Stack>
-                    </Stack>
-                  </Box>
+                      </Stack>
+                    </Box>
+                  </Collapse>
                 );
               })}
+              {visibleWarehouseCount < sortedWarehouses.length && (
+                <Box ref={warehousesLoadMoreRef} sx={{ height: 1 }} />
+              )}
             </Stack>
           </WarehouseZone>
-
-          <Box sx={{ mt: 'auto', pt: 1.2 }}>
-            {warehouses.length > 3 && (
-              <Button
-                fullWidth
-                variant="outlined"
-                size="small"
-                onClick={() => setShowAll(!showAll)}
-                sx={{
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: 700,
-                }}
-              >
-                {showAll ? 'Свернуть склады' : `Показать все склады (+${warehouses.length - 3})`}
-              </Button>
-            )}
-          </Box>
         </CardContent>
       </StyledCard>
 
       <Dialog
-        open={isImageModalOpen}
-        onClose={() => setIsImageModalOpen(false)}
+        open={Boolean(imageViewer)}
+        onClose={() => setImageViewer(null)}
         maxWidth="lg"
         fullWidth
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
           <Typography variant="subtitle1" noWrap sx={{ maxWidth: '92%' }}>
-            {product.brand || ''} {product.article || ''} {product.name ? `- ${product.name}` : ''}
+            {imageViewer?.product?.brand || ''} {imageViewer?.product?.article || ''} {imageViewer?.product?.name ? `- ${imageViewer.product.name}` : ''}
           </Typography>
-          <IconButton onClick={() => setIsImageModalOpen(false)} aria-label="Закрыть">
+          <IconButton onClick={() => setImageViewer(null)} aria-label="Закрыть">
             <CloseOutlined />
           </IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: 1, pb: 2 }}>
           <Box sx={{ position: 'relative', minHeight: 520, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            {validImages.length > 0 && (
+            {imageViewer && (
               <Zoom>
                 <img
-                  src={validImages[currentImageIndex]}
-                  alt={product.name}
+                  src={imageViewer.images[imageViewer.index]}
+                  alt={imageViewer.product?.name || imageViewer.product?.article || 'Фото товара'}
                   style={{
                     maxWidth: '100%',
                     maxHeight: '72vh',
@@ -571,11 +489,11 @@ function ProductCard({
               </Zoom>
             )}
 
-            {validImages.length > 1 && (
+            {imageViewer?.images.length > 1 && (
               <>
                 <IconButton
                   size="large"
-                  onClick={showPrevImage}
+                  onClick={showPreviousViewerImage}
                   aria-label="Предыдущее фото"
                   sx={{
                     position: 'absolute',
@@ -591,7 +509,7 @@ function ProductCard({
                 </IconButton>
                 <IconButton
                   size="large"
-                  onClick={showNextImage}
+                  onClick={showNextViewerImage}
                   aria-label="Следующее фото"
                   sx={{
                     position: 'absolute',
@@ -607,11 +525,11 @@ function ProductCard({
                 </IconButton>
                 <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
                   <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap sx={{ py: 1 }}>
-                    {validImages.map((image, index) => (
+                    {imageViewer.images.map((image, index) => (
                       <Box
                         key={`${image}-${index}`}
                         component="button"
-                        onClick={() => setCurrentImageIndex(index)}
+                        onClick={() => setImageViewer((viewer) => ({ ...viewer, index }))}
                         aria-label={`Открыть фото ${index + 1}`}
                         sx={{
                           border: 0,
@@ -620,8 +538,8 @@ function ProductCard({
                           height: 56,
                           borderRadius: 1,
                           overflow: 'hidden',
-                          opacity: currentImageIndex === index ? 1 : 0.65,
-                          outline: currentImageIndex === index ? `2px solid ${theme.palette.primary.main}` : 'none',
+                          opacity: imageViewer.index === index ? 1 : 0.65,
+                          outline: imageViewer.index === index ? `2px solid ${theme.palette.primary.main}` : 'none',
                           cursor: 'pointer',
                           background: 'transparent',
                         }}
