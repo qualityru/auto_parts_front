@@ -14,13 +14,14 @@ import {
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
-import { authorize, confirmEmail, createUser } from '../utils/api'
+import { authorize, confirmEmail, createUser, passwordRecovery } from '../utils/api'
 
 function AccountModal({ onClose }) {
   const navigate = useNavigate() // 2. Инициализируем навигацию
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
+  const [recoveryHash, setRecoveryHash] = useState('')
   const [message, setMessage] = useState({ text: '', color: 'primary' })
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState('login')
@@ -89,6 +90,55 @@ function AccountModal({ onClose }) {
     }
   }
 
+  async function handleSendRecoveryCode() {
+    if (!email) return showMsg('Введите email', 'error')
+    setLoading(true)
+    try {
+      await confirmEmail({ email }, undefined, true)
+      setCode('')
+      setStep('recovery-confirm')
+      showMsg('Код для восстановления отправлен на почту.')
+    } catch (e) {
+      showMsg(e.message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleConfirmRecovery() {
+    if (!code) return showMsg('Введите код из письма', 'error')
+    setLoading(true)
+    try {
+      const result = await confirmEmail({ email }, code, true)
+      const hash = result?.data?.hash
+      if (!hash) return showMsg('Не удалось подтвердить код', 'error')
+      setRecoveryHash(hash)
+      setPassword('')
+      setStep('recovery-password')
+      showMsg('Код подтверждён. Придумайте новый пароль.')
+    } catch (e) {
+      showMsg(e.message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handlePasswordRecovery() {
+    if (!password) return showMsg('Введите новый пароль', 'error')
+    setLoading(true)
+    try {
+      await passwordRecovery({ login: email, password }, recoveryHash)
+      setCode('')
+      setRecoveryHash('')
+      setStep('login')
+      showMsg('Пароль изменён. Теперь войдите с новым паролем.', 'primary')
+    } catch (e) {
+      showMsg(e.message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <Dialog
       open
@@ -112,17 +162,18 @@ function AccountModal({ onClose }) {
             label="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={step.startsWith('recovery')}
             fullWidth
             size="small"
           />
-          <TextField
-            label="Пароль"
+          {step !== 'recovery-confirm' && <TextField
+            label={step === 'recovery-password' ? 'Новый пароль' : 'Пароль'}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             fullWidth
             size="small"
-          />
+          />}
 
           {step === 'login' ? (
             <Stack spacing={1}>
@@ -132,8 +183,11 @@ function AccountModal({ onClose }) {
               <Button variant="outlined" onClick={handleSendCode} disabled={loading} fullWidth>
                 Зарегистрироваться
               </Button>
+              <Button variant="text" onClick={handleSendRecoveryCode} disabled={loading}>
+                Забыли пароль?
+              </Button>
             </Stack>
-          ) : (
+          ) : step === 'confirm' ? (
             <Stack spacing={2} sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
               <TextField
                 label="Код из письма"
@@ -146,6 +200,19 @@ function AccountModal({ onClose }) {
                 Подтвердить регистрацию
               </Button>
               <Button size="small" onClick={() => setStep('login')}>Назад</Button>
+            </Stack>
+          ) : step === 'recovery-confirm' ? (
+            <Stack spacing={2} sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+              <Typography variant="body2">Введите код из письма, чтобы подтвердить восстановление пароля.</Typography>
+              <TextField label="Код из письма" value={code} onChange={(e) => setCode(e.target.value)} fullWidth size="small" />
+              <Button variant="contained" onClick={handleConfirmRecovery} disabled={loading}>{loading ? <CircularProgress size={24} /> : 'Подтвердить код'}</Button>
+              <Button size="small" onClick={() => setStep('login')} disabled={loading}>Назад</Button>
+            </Stack>
+          ) : (
+            <Stack spacing={2} sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
+              <Typography variant="body2">Укажите новый пароль для аккаунта.</Typography>
+              <Button variant="contained" color="success" onClick={handlePasswordRecovery} disabled={loading}>{loading ? <CircularProgress size={24} /> : 'Сохранить новый пароль'}</Button>
+              <Button size="small" onClick={() => setStep('login')} disabled={loading}>Назад</Button>
             </Stack>
           )}
 

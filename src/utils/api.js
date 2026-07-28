@@ -333,7 +333,7 @@ export async function passwordRecovery(requestBody, guard_hash = undefined) {
   const query = guard_hash ? `?guard_hash=${encodeURIComponent(guard_hash)}` : ''
   const res = await request(`/auth/password_recovery${query}`, {
     method: 'POST',
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(normalizeLoginPayload(requestBody)),
   })
 
   try {
